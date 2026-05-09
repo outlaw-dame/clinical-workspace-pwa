@@ -2,7 +2,9 @@ import { deterministicLocalEmbeddingProvider, createDeterministicTokenHashEmbedd
 import {
   createEmbeddingWithProvider,
   serializeEmbeddingForPgVector,
-  type LocalEmbeddingProvider
+  type LocalEmbeddingInput,
+  type LocalEmbeddingProvider,
+  type LocalEmbeddingPurpose
 } from "./embeddingProvider";
 import { LOCAL_EMBEDDING_DIMENSIONS } from "./searchConfig";
 import { sanitizeSearchQuery } from "./searchSanitization";
@@ -14,19 +16,17 @@ export function getActiveLocalEmbeddingProvider(): LocalEmbeddingProvider {
 }
 
 export async function createDocumentEmbedding(value: string, signal?: AbortSignal): Promise<number[]> {
-  return createEmbeddingWithProvider(activeLocalEmbeddingProvider, {
-    text: value,
-    purpose: "document",
-    signal
-  });
+  return createEmbeddingWithProvider(
+    activeLocalEmbeddingProvider,
+    createLocalEmbeddingInput(value, "document", signal)
+  );
 }
 
 export async function createQueryEmbeddingWithProvider(value: string, signal?: AbortSignal): Promise<number[]> {
-  return createEmbeddingWithProvider(activeLocalEmbeddingProvider, {
-    text: value,
-    purpose: "query",
-    signal
-  });
+  return createEmbeddingWithProvider(
+    activeLocalEmbeddingProvider,
+    createLocalEmbeddingInput(value, "query", signal)
+  );
 }
 
 export function createLocalEmbedding(value: string): number[] {
@@ -40,4 +40,12 @@ export function createQueryEmbedding(value: string): number[] {
 
 export function toPgVector(value: readonly number[]): string {
   return serializeEmbeddingForPgVector(value, LOCAL_EMBEDDING_DIMENSIONS);
+}
+
+function createLocalEmbeddingInput(
+  text: string,
+  purpose: LocalEmbeddingPurpose,
+  signal: AbortSignal | undefined
+): LocalEmbeddingInput {
+  return signal === undefined ? { text, purpose } : { text, purpose, signal };
 }
