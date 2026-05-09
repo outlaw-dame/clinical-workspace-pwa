@@ -115,9 +115,12 @@ async function readStoredDataKey(): Promise<CryptoKey | undefined> {
   const database = await openKeyDatabase();
 
   try {
-    return await runKeyStoreRequest<CryptoKey | undefined>(
-      database.transaction(KEY_STORE_NAME, "readonly").objectStore(KEY_STORE_NAME).get(DATA_KEY_ID)
-    );
+    const request = database
+      .transaction(KEY_STORE_NAME, "readonly")
+      .objectStore(KEY_STORE_NAME)
+      .get(DATA_KEY_ID) as IDBRequest<CryptoKey | undefined>;
+
+    return await runKeyStoreRequest(request);
   } finally {
     database.close();
   }
