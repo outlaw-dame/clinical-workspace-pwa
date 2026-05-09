@@ -1,6 +1,7 @@
 import type { EncryptedPayload } from "../crypto/envelope";
 import { decryptInCryptoWorker, encryptInCryptoWorker } from "../crypto/workerClient";
 import { getLocalDb } from "../db/client";
+import { replaceUnsafeControlCharacters } from "../../shared/textSanitation";
 
 type SecureNotePayload = {
   schemaVersion: 1;
@@ -30,7 +31,6 @@ export type SecureNoteDraft = {
 
 const MAX_NOTE_TITLE_LENGTH = 160;
 const MAX_NOTE_BODY_LENGTH = 20_000;
-const UNSAFE_CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 
 export async function createSecureNote(draft: SecureNoteDraft): Promise<SecureNote> {
   const payload = sanitizeDraft(draft);
@@ -105,16 +105,14 @@ function sanitizeDraft(draft: SecureNoteDraft): SecureNotePayload {
 }
 
 function normalizeTitle(value: string): string {
-  return value
-    .replace(UNSAFE_CONTROL_CHARACTERS, " ")
+  return replaceUnsafeControlCharacters(value)
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, MAX_NOTE_TITLE_LENGTH);
 }
 
 function normalizeBody(value: string): string {
-  return value
-    .replace(UNSAFE_CONTROL_CHARACTERS, " ")
+  return replaceUnsafeControlCharacters(value)
     .replace(/\r\n?/g, "\n")
     .trim()
     .slice(0, MAX_NOTE_BODY_LENGTH);
