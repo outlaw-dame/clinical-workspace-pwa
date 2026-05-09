@@ -1,5 +1,6 @@
 import { decodeBase64, encodeBase64 } from "../local/crypto/base64";
 import { getLocalDb } from "../local/db/client";
+import { replaceUnsafeControlCharacters } from "../shared/textSanitation";
 
 type CredentialRow = {
   credential_id: string;
@@ -23,7 +24,7 @@ const CHALLENGE_BYTES = 32;
 const USER_HANDLE_BYTES = 32;
 
 export function canUsePasskeys(): boolean {
-  return "PublicKeyCredential" in window && typeof navigator.credentials?.create === "function";
+  return "PublicKeyCredential" in window && typeof navigator.credentials.create === "function";
 }
 
 export async function hasLocalPasskey(): Promise<boolean> {
@@ -42,6 +43,7 @@ export async function registerLocalPasskey(
     throw new Error("Passkeys are not available on this device/browser");
   }
 
+  const safeDisplayName = sanitizeDisplayName(displayName);
   const userHandle = randomBase64Url(USER_HANDLE_BYTES);
   const credential = await navigator.credentials.create({
     publicKey: {
@@ -52,7 +54,7 @@ export async function registerLocalPasskey(
       user: {
         id: decodeBase64Url(userHandle),
         name: LOCAL_USER_NAME,
-        displayName: sanitizeDisplayName(displayName)
+        displayName: safeDisplayName
       },
       pubKeyCredParams: [
         { type: "public-key", alg: -7 },
@@ -78,13 +80,13 @@ export async function registerLocalPasskey(
   await db.query(
     `INSERT INTO webauthn_credentials (id, credential_id, user_handle, display_name, created_at)
      VALUES ($1, $2, $3, $4, $5)`,
-    [crypto.randomUUID(), credentialId, userHandle, sanitizeDisplayName(displayName), now]
+    [crypto.randomUUID(), credentialId, userHandle, safeDisplayName, now]
   );
 
   return {
     credentialId,
     userHandle,
-    displayName: sanitizeDisplayName(displayName)
+    displayName: safeDisplayName
   };
 }
 
@@ -162,5 +164,10 @@ function decodeBase64Url(value: string): Uint8Array<ArrayBuffer> {
 }
 
 function sanitizeDisplayName(value: string): string {
-  return value.replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || DEFAULT_DISPLAY_NAME;
+  return (
+    replaceUnsafeControlCharacters(value)
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 80) || DEFAULT_DISPLAY_NAME
+  );
 }
