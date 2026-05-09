@@ -11,7 +11,7 @@ export function sanitizeSearchQuery(value: string): SanitizedSearchQuery {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, MAX_QUERY_LENGTH);
-  const normalized = raw.toLocaleLowerCase();
+  const normalized = raw.toLowerCase();
   const tokens = Array.from(normalized.matchAll(TOKEN_PATTERN), ([match]) => match)
     .map((token) => token.replace(/^[-']+|[-']+$/g, ""))
     .filter((token) => token.length >= MIN_TOKEN_LENGTH)
@@ -28,7 +28,7 @@ export function createSafePreview(value: string, query: SanitizedSearchQuery, ma
 
   if (!normalizedBody) return "No body text.";
 
-  const lowerBody = normalizedBody.toLocaleLowerCase();
+  const lowerBody = normalizedBody.toLowerCase();
   const firstMatchIndex = query.tokens.reduce<number | undefined>((nearest, token) => {
     const index = lowerBody.indexOf(token);
     if (index < 0) return nearest;

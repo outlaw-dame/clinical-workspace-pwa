@@ -13,8 +13,8 @@ export function createLexicalCandidates(
 }
 
 export function scoreLexicalMatch(note: SearchableSecureNote, query: SanitizedSearchQuery): number {
-  const title = note.title.toLocaleLowerCase();
-  const body = note.body.toLocaleLowerCase();
+  const title = note.title.toLowerCase();
+  const body = note.body.toLowerCase();
   let score = 0;
 
   for (const token of query.tokens) {

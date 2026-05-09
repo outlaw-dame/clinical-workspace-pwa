@@ -31,6 +31,20 @@ describe("scoreLexicalMatch", () => {
     expect(scoreLexicalMatch(notes[1]!, query)).toBeGreaterThan(scoreLexicalMatch(notes[0]!, query));
   });
 
+  it("matches uppercase ASCII note text with locale-independent folding", () => {
+    const score = scoreLexicalMatch(
+      {
+        id: "note-uppercase",
+        title: "INITIAL intake",
+        body: "Follow-up paperwork.",
+        updatedAt: "2026-05-04T00:00:00.000Z"
+      },
+      sanitizeSearchQuery("initial")
+    );
+
+    expect(score).toBeGreaterThan(0);
+  });
+
   it("returns zero when no tokens or phrase match", () => {
     expect(scoreLexicalMatch(notes[2]!, sanitizeSearchQuery("sleep"))).toBe(0);
   });
