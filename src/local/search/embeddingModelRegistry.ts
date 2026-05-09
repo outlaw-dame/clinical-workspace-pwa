@@ -14,7 +14,7 @@ export function createLocalEmbedding(value: string): number[] {
     if (normalizedToken.length < 2) continue;
 
     const index = stableHash(normalizedToken) % LOCAL_EMBEDDING_DIMENSIONS;
-    vector[index] += 1 / Math.sqrt(normalizedToken.length);
+    vector[index] = (vector[index] ?? 0) + 1 / Math.sqrt(normalizedToken.length);
   }
 
   return normalizeVector(vector);
