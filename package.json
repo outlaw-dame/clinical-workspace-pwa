@@ -16,7 +16,7 @@
     "format": "prettier --write ."
   },
   "dependencies": {
-    "@electric-sql/pglite": "^0.3.7",
+    "@electric-sql/pglite": "^0.4.0",
     "solid-js": "^1.9.5",
     "vite-plugin-pwa": "^0.21.1",
     "workbox-precaching": "^7.3.0",
