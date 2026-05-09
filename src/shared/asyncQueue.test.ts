@@ -10,6 +10,11 @@ const defer = <T>() => {
   return { promise, resolve };
 };
 
+const flushMicrotasks = async (): Promise<void> => {
+  await Promise.resolve();
+  await Promise.resolve();
+};
+
 describe("createSerializedAsyncQueue", () => {
   it("runs queued tasks one at a time in insertion order", async () => {
     const queue = createSerializedAsyncQueue();
@@ -28,7 +33,7 @@ describe("createSerializedAsyncQueue", () => {
       return Promise.resolve("second");
     });
 
-    await Promise.resolve();
+    await flushMicrotasks();
     expect(events).toEqual(["first:start"]);
 
     first.resolve("done");
