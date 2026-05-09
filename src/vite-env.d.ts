@@ -11,9 +11,3 @@ declare module "virtual:pwa-register" {
 
   export function registerSW(options?: RegisterSWOptions): (reloadPage?: boolean) => Promise<void>;
 }
-
-declare const self: ServiceWorkerGlobalScope & typeof globalThis;
-
-interface ServiceWorkerGlobalScope {
-  __WB_MANIFEST: Array<{ revision: string | null; url: string }>;
-}
