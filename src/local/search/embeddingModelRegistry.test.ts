@@ -6,7 +6,12 @@ import {
   getActiveLocalEmbeddingProvider,
   toPgVector
 } from "./embeddingModelRegistry";
-import { getActiveLocalEmbeddingManifest } from "./localEmbeddingManifests";
+import {
+  EMBEDDINGGEMMA_CANDIDATE_MODEL_ID,
+  EMBEDDINGGEMMA_SELECTED_DIMENSIONS,
+  getActiveLocalEmbeddingManifest,
+  getCandidateLocalEmbeddingManifests
+} from "./localEmbeddingManifests";
 import { LOCAL_EMBEDDING_DIMENSIONS, LOCAL_EMBEDDING_MODEL } from "./searchConfig";
 
 describe("createLocalEmbedding", () => {
@@ -35,14 +40,26 @@ describe("embedding provider facade", () => {
     expect(provider.privacyBoundary).toBe("local-only");
   });
 
-  it("exposes the active deterministic fallback manifest before model selection", () => {
+  it("exposes the active deterministic fallback manifest before model activation", () => {
     const manifest = getActiveLocalEmbeddingManifest();
 
     expect(manifest.id).toBe(LOCAL_EMBEDDING_MODEL);
     expect(manifest.runtime).toBe("deterministic-token-hash");
     expect(manifest.quality).toBe("fallback");
+    expect(manifest.activationState).toBe("active");
     expect(manifest.artifactSource).toBe("bundled");
     expect(manifest.privacyBoundary).toBe("local-only");
+  });
+
+  it("exposes EmbeddingGemma as a candidate manifest without activating it", () => {
+    const [candidate] = getCandidateLocalEmbeddingManifests();
+
+    expect(candidate?.modelId).toBe(EMBEDDINGGEMMA_CANDIDATE_MODEL_ID);
+    expect(candidate?.dimensions).toBe(EMBEDDINGGEMMA_SELECTED_DIMENSIONS);
+    expect(candidate?.runtime).toBe("local-transformer-worker");
+    expect(candidate?.quality).toBe("candidate");
+    expect(candidate?.activationState).toBe("candidate");
+    expect(getActiveLocalEmbeddingManifest().id).not.toBe(candidate?.id);
   });
 
   it("creates document embeddings through the active provider", async () => {
