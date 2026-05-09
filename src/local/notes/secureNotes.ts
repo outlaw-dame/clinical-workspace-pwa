@@ -30,6 +30,7 @@ export type SecureNoteDraft = {
 
 const MAX_NOTE_TITLE_LENGTH = 160;
 const MAX_NOTE_BODY_LENGTH = 20_000;
+const UNSAFE_CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 
 export async function createSecureNote(draft: SecureNoteDraft): Promise<SecureNote> {
   const payload = sanitizeDraft(draft);
@@ -93,8 +94,8 @@ async function decryptNotePayload(encryptedPayloadJson: string): Promise<SecureN
 }
 
 function sanitizeDraft(draft: SecureNoteDraft): SecureNotePayload {
-  const title = normalizeText(draft.title, MAX_NOTE_TITLE_LENGTH) || "Untitled note";
-  const body = normalizeText(draft.body, MAX_NOTE_BODY_LENGTH);
+  const title = normalizeTitle(draft.title) || "Untitled note";
+  const body = normalizeBody(draft.body);
 
   return {
     schemaVersion: 1,
@@ -103,8 +104,20 @@ function sanitizeDraft(draft: SecureNoteDraft): SecureNotePayload {
   };
 }
 
-function normalizeText(value: string, maxLength: number): string {
-  return value.replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim().slice(0, maxLength);
+function normalizeTitle(value: string): string {
+  return value
+    .replace(UNSAFE_CONTROL_CHARACTERS, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, MAX_NOTE_TITLE_LENGTH);
+}
+
+function normalizeBody(value: string): string {
+  return value
+    .replace(UNSAFE_CONTROL_CHARACTERS, " ")
+    .replace(/\r\n?/g, "\n")
+    .trim()
+    .slice(0, MAX_NOTE_BODY_LENGTH);
 }
 
 function parseEncryptedPayload(value: string): EncryptedPayload {
