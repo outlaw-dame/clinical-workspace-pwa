@@ -1,6 +1,11 @@
 import { recordAuditEventSafely } from "../audit/auditRepository";
 import { getLocalDb } from "../db/client";
-import { createLocalEmbedding, createQueryEmbedding, toPgVector } from "./embeddingModelRegistry";
+import {
+  createDocumentEmbedding,
+  createQueryEmbeddingWithProvider,
+  getActiveLocalEmbeddingProvider,
+  toPgVector
+} from "./embeddingModelRegistry";
 import { reciprocalRankFusion } from "./hybridFusion";
 import { createLexicalCandidates } from "./lexicalSearch";
 import {
@@ -12,7 +17,6 @@ import { createSafePreview, sanitizeSearchQuery } from "./searchSanitization";
 import {
   DEFAULT_LOCAL_SEARCH_LIMIT,
   LOCAL_EMBEDDING_DIMENSIONS,
-  LOCAL_EMBEDDING_MODEL,
   LOCAL_SEARCH_SCHEMA_VERSION,
   MAX_LOCAL_SEARCH_LIMIT
 } from "./searchConfig";
@@ -45,7 +49,8 @@ export async function indexSecureNoteForSearch(note: SearchableSecureNote): Prom
   await ensureLocalSearchSchema();
   const db = await getLocalDb();
   const now = new Date().toISOString();
-  const embedding = toPgVector(createLocalEmbedding(`${note.title}\n\n${note.body}`));
+  const embeddingProvider = getActiveLocalEmbeddingProvider();
+  const embedding = toPgVector(await createDocumentEmbedding(`${note.title}\n\n${note.body}`));
 
   await db.query(
     `INSERT INTO local_search_chunks (
@@ -67,7 +72,7 @@ export async function indexSecureNoteForSearch(note: SearchableSecureNote): Prom
       0,
       note.updatedAt,
       embedding,
-      LOCAL_EMBEDDING_MODEL,
+      embeddingProvider.id,
       LOCAL_SEARCH_SCHEMA_VERSION,
       now,
       now
@@ -220,7 +225,8 @@ async function createSemanticCandidates(queryText: string, limit: number): Promi
   try {
     await ensureLocalSearchSchema();
     const db = await getLocalDb();
-    const queryEmbedding = toPgVector(createQueryEmbedding(queryText));
+    const embeddingProvider = getActiveLocalEmbeddingProvider();
+    const queryEmbedding = toPgVector(await createQueryEmbeddingWithProvider(queryText));
     const result = await db.query<SemanticSearchRow>(
       `SELECT record_id, embedding <=> $1::vector AS distance
        FROM local_search_chunks
@@ -230,7 +236,7 @@ async function createSemanticCandidates(queryText: string, limit: number): Promi
          AND deleted_at IS NULL
        ORDER BY embedding <=> $1::vector
        LIMIT $5`,
-      [queryEmbedding, "secure_note", LOCAL_EMBEDDING_MODEL, LOCAL_SEARCH_SCHEMA_VERSION, limit]
+      [queryEmbedding, "secure_note", embeddingProvider.id, LOCAL_SEARCH_SCHEMA_VERSION, limit]
     );
 
     return result.rows.map((row) => ({
