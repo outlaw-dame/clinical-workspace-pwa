@@ -6,6 +6,7 @@ import {
   getActiveLocalEmbeddingProvider,
   toPgVector
 } from "./embeddingModelRegistry";
+import { getActiveLocalEmbeddingManifest } from "./localEmbeddingManifests";
 import { LOCAL_EMBEDDING_DIMENSIONS, LOCAL_EMBEDDING_MODEL } from "./searchConfig";
 
 describe("createLocalEmbedding", () => {
@@ -32,6 +33,16 @@ describe("embedding provider facade", () => {
     expect(provider.id).toBe(LOCAL_EMBEDDING_MODEL);
     expect(provider.dimensions).toBe(LOCAL_EMBEDDING_DIMENSIONS);
     expect(provider.privacyBoundary).toBe("local-only");
+  });
+
+  it("exposes the active deterministic fallback manifest before model selection", () => {
+    const manifest = getActiveLocalEmbeddingManifest();
+
+    expect(manifest.id).toBe(LOCAL_EMBEDDING_MODEL);
+    expect(manifest.runtime).toBe("deterministic-token-hash");
+    expect(manifest.quality).toBe("fallback");
+    expect(manifest.artifactSource).toBe("bundled");
+    expect(manifest.privacyBoundary).toBe("local-only");
   });
 
   it("creates document embeddings through the active provider", async () => {

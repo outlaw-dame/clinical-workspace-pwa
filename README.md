@@ -76,7 +76,10 @@ Local semantic search uses an explicit embedding-provider boundary:
 - providers must declare their model ID, dimensions, and local-only privacy boundary;
 - embedding generation supports cancellation and dimension validation;
 - indexed chunks store the provider model ID so future model changes can trigger safe reindexing;
-- the deterministic token-hash provider is a local fallback and test scaffold, not the final clinical semantic model.
+- the deterministic token-hash provider is a local fallback and test scaffold, not the final clinical semantic model;
+- real model work must use the embedding runtime scaffold: manifest validation, runtime capability checks, worker request/response contracts, and privacy-safe provider errors.
+
+The current embedding runtime scaffold intentionally stops before model selection. It does not add an ML dependency, choose a model, or switch the active provider away from the deterministic fallback.
 
 The current passkey flow proves a local browser authenticator ceremony and gates the local workspace. Production sync/session trust still requires server-issued WebAuthn challenges and server-side signature verification.
 
@@ -89,6 +92,7 @@ The current passkey flow proves a local browser authenticator ceremony and gates
 - Encrypted secure notes
 - Local hybrid search over secure notes
 - Local embedding-provider boundary with deterministic fallback provider
+- Local embedding runtime scaffold before model selection
 - Injectable local search repository boundary
 - Privacy-safe audit-event writes with serialized hash-chain updates
 - Background/batched search-index repair
@@ -98,11 +102,12 @@ The current passkey flow proves a local browser authenticator ceremony and gates
 
 ## Next implementation phase
 
-1. Replace the deterministic fallback embedding provider with a real local provider behind worker, cancellation, model-version, and reindex boundaries.
-2. Add chat message model, local optimistic send, and sync outbox operations with exponential backoff and idempotency.
-3. Add document import flow that encrypts before writing to OPFS.
-4. Add task and calendar records that fit the Today/Chat/Notes/Calendar surfaces rather than becoming a separate project-management module.
-5. Expand audit coverage around lock/unlock, document access, local writes, and sync attempts without storing PHI in logs.
+1. Choose the first real local embedding model and runtime package.
+2. Replace the deterministic fallback embedding provider with a real local provider behind worker, cancellation, model-version, and reindex boundaries.
+3. Add chat message model, local optimistic send, and sync outbox operations with exponential backoff and idempotency.
+4. Add document import flow that encrypts before writing to OPFS.
+5. Add task and calendar records that fit the Today/Chat/Notes/Calendar surfaces rather than becoming a separate project-management module.
+6. Expand audit coverage around lock/unlock, document access, local writes, and sync attempts without storing PHI in logs.
 
 ## Compliance note
 
