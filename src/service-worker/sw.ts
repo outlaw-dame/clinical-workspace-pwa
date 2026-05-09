@@ -5,17 +5,15 @@ import { registerRoute } from "workbox-routing";
 import { CacheFirst, NetworkOnly, StaleWhileRevalidate } from "workbox-strategies";
 
 type WorkboxManifestEntry = { revision: string | null; url: string };
-type WorkspaceServiceWorkerScope = ServiceWorkerGlobalScope &
+type SkipWaitingMessage = { type: "SKIP_WAITING" };
+
+declare const self: ServiceWorkerGlobalScope &
   typeof globalThis & {
     __WB_MANIFEST: WorkboxManifestEntry[];
   };
 
-type SkipWaitingMessage = { type: "SKIP_WAITING" };
-
-const serviceWorker = self as unknown as WorkspaceServiceWorkerScope;
-
 // Vite injects the app-shell asset manifest here at build time.
-precacheAndRoute(serviceWorker.__WB_MANIFEST);
+precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 
 registerRoute(
@@ -39,9 +37,9 @@ registerRoute(
   new NetworkOnly()
 );
 
-serviceWorker.addEventListener("message", (event: ExtendableMessageEvent) => {
+self.addEventListener("message", (event: ExtendableMessageEvent) => {
   if (isSkipWaitingMessage(event.data)) {
-    void serviceWorker.skipWaiting();
+    void self.skipWaiting();
   }
 });
 
