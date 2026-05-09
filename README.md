@@ -70,6 +70,13 @@ Local search follows the same privacy boundary:
 - query text is not written to audit metadata;
 - previews are generated from decrypted in-memory notes only after unlock.
 
+Local semantic search uses an explicit embedding-provider boundary:
+
+- providers must declare their model ID, dimensions, and local-only privacy boundary;
+- embedding generation supports cancellation and dimension validation;
+- indexed chunks store the provider model ID so future model changes can trigger safe reindexing;
+- the deterministic token-hash provider is a local fallback and test scaffold, not the final clinical semantic model.
+
 The current passkey flow proves a local browser authenticator ceremony and gates the local workspace. Production sync/session trust still requires server-issued WebAuthn challenges and server-side signature verification.
 
 ## Implemented surfaces
@@ -80,6 +87,7 @@ The current passkey flow proves a local browser authenticator ceremony and gates
 - Today view
 - Encrypted secure notes
 - Local hybrid search over secure notes
+- Local embedding-provider boundary with deterministic fallback provider
 - Privacy-safe audit-event writes with serialized hash-chain updates
 - Background/batched search-index repair
 - Placeholder surfaces for Chat, Calendar, and Documents
@@ -88,8 +96,8 @@ The current passkey flow proves a local browser authenticator ceremony and gates
 
 ## Next implementation phase
 
-1. Harden search architecture with injectable repositories and integration-style tests around local schema/indexing.
-2. Replace the deterministic embedding scaffold with a real local embedding provider abstraction behind worker, cancellation, model-version, and reindex boundaries.
+1. Add an injectable search repository layer and integration-style tests around local schema/indexing.
+2. Replace the deterministic fallback embedding provider with a real local provider behind worker, cancellation, model-version, and reindex boundaries.
 3. Add chat message model, local optimistic send, and sync outbox operations with exponential backoff and idempotency.
 4. Add document import flow that encrypts before writing to OPFS.
 5. Add task and calendar records that fit the Today/Chat/Notes/Calendar surfaces rather than becoming a separate project-management module.
