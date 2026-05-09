@@ -45,7 +45,7 @@ export function detectCapabilities(): AppCapabilities {
     serviceWorker: "serviceWorker" in navigator,
     opfs:
       "storage" in navigator &&
-      typeof navigator.storage?.getDirectory === "function",
+      typeof navigator.storage.getDirectory === "function",
     webAuthn: "PublicKeyCredential" in window && "credentials" in navigator,
     webCrypto: "crypto" in globalThis && "subtle" in globalThis.crypto,
     filePicker: "showOpenFilePicker" in window,

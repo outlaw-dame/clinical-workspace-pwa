@@ -17,7 +17,7 @@ export type AppLockOptions = {
 export function createAppLock(options: AppLockOptions = {}): AppLockState {
   const idleTimeoutMs = options.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
   const [locked, setLocked] = createSignal(true);
-  const [lastActivityAt, setLastActivityAt] = createSignal(Date.now());
+  let lastActivityAt = Date.now();
 
   const lock = () => {
     options.onLock?.();
@@ -25,13 +25,13 @@ export function createAppLock(options: AppLockOptions = {}): AppLockState {
   };
 
   const unlock = () => {
-    setLastActivityAt(Date.now());
+    lastActivityAt = Date.now();
     setLocked(false);
   };
 
   const markActivity = () => {
     if (!locked()) {
-      setLastActivityAt(Date.now());
+      lastActivityAt = Date.now();
     }
   };
 
@@ -39,7 +39,7 @@ export function createAppLock(options: AppLockOptions = {}): AppLockState {
     if (locked()) return;
 
     const interval = window.setInterval(() => {
-      if (Date.now() - lastActivityAt() >= idleTimeoutMs) {
+      if (Date.now() - lastActivityAt >= idleTimeoutMs) {
         lock();
       }
     }, 15_000);
