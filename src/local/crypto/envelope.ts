@@ -5,7 +5,7 @@ const NONCE_BYTES = 12;
 export type EncryptedPayload = {
   ciphertext: string;
   nonce: string;
-  algorithm: typeof ENCRYPTION_ALGORITHM;
+  algorithm: string;
 };
 
 export async function createEphemeralDataKey(): Promise<CryptoKey> {
