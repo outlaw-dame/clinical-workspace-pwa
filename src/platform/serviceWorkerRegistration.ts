@@ -5,6 +5,8 @@ export async function registerAppServiceWorker(): Promise<void> {
     return;
   }
 
+  await Promise.resolve();
+
   try {
     const updateSW = registerSW({
       immediate: true,
