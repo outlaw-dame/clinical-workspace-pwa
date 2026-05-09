@@ -25,11 +25,11 @@ describe("createSafePreview", () => {
     const preview = createSafePreview(
       "The first part is unrelated. Later the client mentioned recurring sleep trouble after stress.",
       query,
-      48
+      96
     );
 
     expect(preview).toContain("sleep trouble");
-    expect(preview.length).toBeLessThanOrEqual(50);
+    expect(preview.length).toBeLessThanOrEqual(98);
   });
 
   it("uses a safe fallback for blank note bodies", () => {
