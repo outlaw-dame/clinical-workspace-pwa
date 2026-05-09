@@ -2,7 +2,7 @@ import { recordAuditEventSafely } from "../audit/auditRepository";
 import { getLocalDb } from "../db/client";
 import { createLocalEmbedding, createQueryEmbedding, toPgVector } from "./embeddingModelRegistry";
 import { reciprocalRankFusion } from "./hybridFusion";
-import { sanitizeSearchQuery, createSafePreview } from "./searchSanitization";
+import { createSafePreview, sanitizeSearchQuery } from "./searchSanitization";
 import {
   DEFAULT_LOCAL_SEARCH_LIMIT,
   LOCAL_EMBEDDING_DIMENSIONS,
@@ -35,7 +35,11 @@ type SemanticSearchRow = {
   distance: number;
 };
 
+const REPAIR_BATCH_SIZE = 12;
+const REPAIR_DEBOUNCE_MS = 500;
 let searchSchemaPromise: Promise<void> | undefined;
+let scheduledRepairTimer: ReturnType<typeof setTimeout> | undefined;
+let scheduledRepairNotes: SearchableSecureNote[] | undefined;
 
 export async function ensureLocalSearchSchema(): Promise<void> {
   searchSchemaPromise ??= initializeLocalSearchSchema();
@@ -103,6 +107,24 @@ export async function removeSecureNoteFromSearchIndexSafely(noteId: string): Pro
   }
 }
 
+export function scheduleSecureNoteSearchIndexRepair(notes: readonly SearchableSecureNote[]): void {
+  scheduledRepairNotes = notes.map((note) => ({ ...note }));
+
+  if (scheduledRepairTimer !== undefined) {
+    clearTimeout(scheduledRepairTimer);
+  }
+
+  scheduledRepairTimer = setTimeout(() => {
+    const notesToRepair = scheduledRepairNotes ?? [];
+    scheduledRepairTimer = undefined;
+    scheduledRepairNotes = undefined;
+
+    void repairSecureNoteSearchIndex(notesToRepair).catch((error: unknown) => {
+      console.warn("Unable to repair secure note search index", error);
+    });
+  }, REPAIR_DEBOUNCE_MS);
+}
+
 export async function repairSecureNoteSearchIndex(notes: readonly SearchableSecureNote[]): Promise<void> {
   await ensureLocalSearchSchema();
   const db = await getLocalDb();
@@ -114,22 +136,13 @@ export async function repairSecureNoteSearchIndex(notes: readonly SearchableSecu
   );
   const indexedByRecordId = new Map(indexedRows.rows.map((row) => [row.record_id, row.source_updated_at]));
   const activeRecordIds = new Set(notes.map((note) => note.id));
+  const staleNotes = notes.filter((note) => indexedByRecordId.get(note.id) !== note.updatedAt);
+  const removedRecordIds = indexedRows.rows
+    .map((row) => row.record_id)
+    .filter((recordId) => !activeRecordIds.has(recordId));
 
-  await Promise.all(
-    notes.map(async (note) => {
-      if (indexedByRecordId.get(note.id) !== note.updatedAt) {
-        await indexSecureNoteForSearch(note);
-      }
-    })
-  );
-
-  await Promise.all(
-    indexedRows.rows.map(async (row) => {
-      if (!activeRecordIds.has(row.record_id)) {
-        await removeSecureNoteFromSearchIndex(row.record_id);
-      }
-    })
-  );
+  await runInBatches(staleNotes, REPAIR_BATCH_SIZE, indexSecureNoteForSearch);
+  await runInBatches(removedRecordIds, REPAIR_BATCH_SIZE, removeSecureNoteFromSearchIndex);
 }
 
 export async function searchSecureNotes(
@@ -144,10 +157,6 @@ export async function searchSecureNotes(
   if (!query.normalized || query.tokens.length === 0) {
     return [];
   }
-
-  await repairSecureNoteSearchIndex(notes).catch((error: unknown) => {
-    console.warn("Unable to repair secure note search index", error);
-  });
 
   const lexicalCandidates = mode === "semantic" ? [] : createLexicalCandidates(notes, query, limit);
   const semanticCandidates = mode === "lexical" ? [] : await createSemanticCandidates(query.normalized, limit);
@@ -193,9 +202,9 @@ export async function runLocalSearchSmokeTest(): Promise<boolean> {
   };
 
   await indexSecureNoteForSearch(note);
-  const results = await searchSecureNotes([note], "hybrid smoke", { limit: 5 });
+  const semanticCandidates = await createSemanticCandidates("hybrid smoke", 5);
   await removeSecureNoteFromSearchIndex(id);
-  return results.some((result) => result.recordId === id);
+  return semanticCandidates.some((candidate) => candidate.id === id);
 }
 
 async function initializeLocalSearchSchema(): Promise<void> {
@@ -222,6 +231,9 @@ async function initializeLocalSearchSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_local_search_chunks_record
       ON local_search_chunks (record_id, record_type)
       WHERE deleted_at IS NULL;
+
+    CREATE INDEX IF NOT EXISTS idx_local_search_chunks_embedding
+      ON local_search_chunks USING hnsw (embedding vector_cosine_ops);
   `);
 }
 
@@ -306,4 +318,15 @@ function getMatchKind(
 function normalizeLimit(limit: number | undefined): number {
   if (!Number.isFinite(limit)) return DEFAULT_LOCAL_SEARCH_LIMIT;
   return Math.min(MAX_LOCAL_SEARCH_LIMIT, Math.max(1, Math.trunc(limit ?? DEFAULT_LOCAL_SEARCH_LIMIT)));
+}
+
+async function runInBatches<T>(
+  items: readonly T[],
+  batchSize: number,
+  task: (item: T) => Promise<void>
+): Promise<void> {
+  for (let start = 0; start < items.length; start += batchSize) {
+    const batch = items.slice(start, start + batchSize);
+    await Promise.all(batch.map((item) => task(item)));
+  }
 }
