@@ -9,11 +9,18 @@ export type AppLockState = {
   markActivity: () => void;
 };
 
-export function createAppLock(idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS): AppLockState {
+export type AppLockOptions = {
+  idleTimeoutMs?: number;
+  onLock?: () => void;
+};
+
+export function createAppLock(options: AppLockOptions = {}): AppLockState {
+  const idleTimeoutMs = options.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
   const [locked, setLocked] = createSignal(true);
   const [lastActivityAt, setLastActivityAt] = createSignal(Date.now());
 
   const lock = () => {
+    options.onLock?.();
     setLocked(true);
   };
 
