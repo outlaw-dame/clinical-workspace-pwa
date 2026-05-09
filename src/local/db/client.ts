@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS audit_events (
   event_hash TEXT NOT NULL
 );
 
+CREATE INDEX IF NOT EXISTS idx_audit_events_created_at
+  ON audit_events (created_at DESC, id DESC);
+
 CREATE TABLE IF NOT EXISTS sync_outbox (
   id TEXT PRIMARY KEY,
   operation_type TEXT NOT NULL,
