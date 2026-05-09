@@ -1,15 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SearchableSecureNote } from "./searchTypes";
 
-const getLocalDb = vi.fn();
-const recordAuditEventSafely = vi.fn();
+const mocks = vi.hoisted(() => ({
+  getLocalDb: vi.fn(),
+  recordAuditEventSafely: vi.fn()
+}));
 
 vi.mock("../db/client", () => ({
-  getLocalDb
+  getLocalDb: mocks.getLocalDb
 }));
 
 vi.mock("../audit/auditRepository", () => ({
-  recordAuditEventSafely
+  recordAuditEventSafely: mocks.recordAuditEventSafely
 }));
 
 const notes: SearchableSecureNote[] = [
@@ -28,8 +30,8 @@ const notes: SearchableSecureNote[] = [
 ];
 
 beforeEach(() => {
-  getLocalDb.mockReset();
-  recordAuditEventSafely.mockReset();
+  mocks.getLocalDb.mockReset();
+  mocks.recordAuditEventSafely.mockReset();
 });
 
 describe("searchSecureNotes", () => {
@@ -43,8 +45,8 @@ describe("searchSecureNotes", () => {
 
     expect(results.map((result) => result.recordId)).toEqual(["sleep-note"]);
     expect(results[0]?.matchKind).toBe("lexical");
-    expect(getLocalDb).not.toHaveBeenCalled();
-    expect(recordAuditEventSafely).toHaveBeenCalledWith("local_search.executed", "local_search", undefined, {
+    expect(mocks.getLocalDb).not.toHaveBeenCalled();
+    expect(mocks.recordAuditEventSafely).toHaveBeenCalledWith("local_search.executed", "local_search", undefined, {
       mode: "lexical",
       tokenCount: 1,
       resultCount: 1
@@ -55,7 +57,7 @@ describe("searchSecureNotes", () => {
     const { searchSecureNotes } = await import("./localSearchIndex");
 
     await expect(searchSecureNotes(notes, " a ", { mode: "lexical" })).resolves.toEqual([]);
-    expect(getLocalDb).not.toHaveBeenCalled();
-    expect(recordAuditEventSafely).not.toHaveBeenCalled();
+    expect(mocks.getLocalDb).not.toHaveBeenCalled();
+    expect(mocks.recordAuditEventSafely).not.toHaveBeenCalled();
   });
 });
