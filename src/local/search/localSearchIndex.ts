@@ -1,5 +1,4 @@
 import { recordAuditEventSafely } from "../audit/auditRepository";
-import { getLocalDb } from "../db/client";
 import {
   createDocumentEmbedding,
   createQueryEmbeddingWithProvider,
@@ -9,6 +8,10 @@ import {
 import { reciprocalRankFusion } from "./hybridFusion";
 import { createLexicalCandidates } from "./lexicalSearch";
 import {
+  getDefaultLocalSearchRepository,
+  type LocalSearchRepository
+} from "./searchRepository";
+import {
   createDebouncedSearchIndexRepairScheduler,
   planSecureNoteSearchIndexRepair,
   runInBatches
@@ -16,7 +19,6 @@ import {
 import { createSafePreview, sanitizeSearchQuery } from "./searchSanitization";
 import {
   DEFAULT_LOCAL_SEARCH_LIMIT,
-  LOCAL_EMBEDDING_DIMENSIONS,
   LOCAL_SEARCH_SCHEMA_VERSION,
   MAX_LOCAL_SEARCH_LIMIT
 } from "./searchConfig";
@@ -25,59 +27,50 @@ import type {
   LocalSearchOptions,
   LocalSearchResult,
   RankedSearchCandidate,
-  SearchableSecureNote,
-  SearchIndexChunkSnapshot
+  SearchableSecureNote
 } from "./searchTypes";
 
 export type { SearchableSecureNote } from "./searchTypes";
 
-type SemanticSearchRow = {
-  record_id: string;
-  distance: number;
+type LocalSearchRuntimeOptions = LocalSearchOptions & {
+  repository?: LocalSearchRepository;
 };
 
 const REPAIR_BATCH_SIZE = 12;
 const REPAIR_DEBOUNCE_MS = 500;
-let searchSchemaPromise: Promise<void> | undefined;
+let defaultSearchSchemaPromise: Promise<void> | undefined;
 
-export async function ensureLocalSearchSchema(): Promise<void> {
-  searchSchemaPromise ??= initializeLocalSearchSchema();
-  return searchSchemaPromise;
+export async function ensureLocalSearchSchema(repository?: LocalSearchRepository): Promise<void> {
+  if (repository) {
+    return repository.ensureSchema();
+  }
+
+  const defaultRepository = getDefaultLocalSearchRepository();
+  defaultSearchSchemaPromise ??= defaultRepository.ensureSchema();
+  return defaultSearchSchemaPromise;
 }
 
-export async function indexSecureNoteForSearch(note: SearchableSecureNote): Promise<void> {
-  await ensureLocalSearchSchema();
-  const db = await getLocalDb();
+export async function indexSecureNoteForSearch(
+  note: SearchableSecureNote,
+  repository = getDefaultLocalSearchRepository()
+): Promise<void> {
+  await ensureLocalSearchSchema(repository);
   const now = new Date().toISOString();
   const embeddingProvider = getActiveLocalEmbeddingProvider();
   const embedding = toPgVector(await createDocumentEmbedding(`${note.title}\n\n${note.body}`));
 
-  await db.query(
-    `INSERT INTO local_search_chunks (
-       id, record_id, record_type, chunk_index, source_updated_at,
-       embedding, embedding_model, schema_version, created_at, updated_at, deleted_at
-     ) VALUES ($1, $2, $3, $4, $5, $6::vector, $7, $8, $9, $10, NULL)
-     ON CONFLICT (record_id, record_type, chunk_index)
-     DO UPDATE SET
-       source_updated_at = EXCLUDED.source_updated_at,
-       embedding = EXCLUDED.embedding,
-       embedding_model = EXCLUDED.embedding_model,
-       schema_version = EXCLUDED.schema_version,
-       updated_at = EXCLUDED.updated_at,
-       deleted_at = NULL`,
-    [
-      `${note.id}:0`,
-      note.id,
-      "secure_note",
-      0,
-      note.updatedAt,
-      embedding,
-      embeddingProvider.id,
-      LOCAL_SEARCH_SCHEMA_VERSION,
-      now,
-      now
-    ]
-  );
+  await repository.upsertSearchChunk({
+    id: `${note.id}:0`,
+    recordId: note.id,
+    recordType: "secure_note",
+    chunkIndex: 0,
+    sourceUpdatedAt: note.updatedAt,
+    embedding,
+    embeddingModel: embeddingProvider.id,
+    schemaVersion: LOCAL_SEARCH_SCHEMA_VERSION,
+    createdAt: now,
+    updatedAt: now
+  });
 }
 
 export async function indexSecureNoteForSearchSafely(note: SearchableSecureNote): Promise<void> {
@@ -88,15 +81,12 @@ export async function indexSecureNoteForSearchSafely(note: SearchableSecureNote)
   }
 }
 
-export async function removeSecureNoteFromSearchIndex(noteId: string): Promise<void> {
-  await ensureLocalSearchSchema();
-  const db = await getLocalDb();
-  await db.query(
-    `UPDATE local_search_chunks
-     SET deleted_at = $1, updated_at = $1
-     WHERE record_type = $2 AND record_id = $3 AND deleted_at IS NULL`,
-    [new Date().toISOString(), "secure_note", noteId]
-  );
+export async function removeSecureNoteFromSearchIndex(
+  noteId: string,
+  repository = getDefaultLocalSearchRepository()
+): Promise<void> {
+  await ensureLocalSearchSchema(repository);
+  await repository.markRecordDeleted("secure_note", noteId, new Date().toISOString());
 }
 
 export async function removeSecureNoteFromSearchIndexSafely(noteId: string): Promise<void> {
@@ -114,36 +104,36 @@ export const scheduleSecureNoteSearchIndexRepair = createDebouncedSearchIndexRep
   onError: (error) => console.warn("Unable to repair secure note search index", error)
 });
 
-export async function repairSecureNoteSearchIndex(notes: readonly SearchableSecureNote[]): Promise<void> {
-  await ensureLocalSearchSchema();
-  const db = await getLocalDb();
-  const indexedRows = await db.query<SearchIndexChunkSnapshot>(
-    `SELECT record_id, source_updated_at
-     FROM local_search_chunks
-     WHERE record_type = $1 AND chunk_index = 0 AND deleted_at IS NULL`,
-    ["secure_note"]
-  );
-  const repairPlan = planSecureNoteSearchIndexRepair(notes, indexedRows.rows);
+export async function repairSecureNoteSearchIndex(
+  notes: readonly SearchableSecureNote[],
+  repository = getDefaultLocalSearchRepository()
+): Promise<void> {
+  await ensureLocalSearchSchema(repository);
+  const indexedRows = await repository.listActiveChunkSnapshots("secure_note", 0);
+  const repairPlan = planSecureNoteSearchIndexRepair(notes, indexedRows);
 
-  await runInBatches(repairPlan.staleNotes, REPAIR_BATCH_SIZE, indexSecureNoteForSearch);
-  await runInBatches(repairPlan.removedRecordIds, REPAIR_BATCH_SIZE, removeSecureNoteFromSearchIndex);
+  await runInBatches(repairPlan.staleNotes, REPAIR_BATCH_SIZE, (note) => indexSecureNoteForSearch(note, repository));
+  await runInBatches(repairPlan.removedRecordIds, REPAIR_BATCH_SIZE, (recordId) =>
+    removeSecureNoteFromSearchIndex(recordId, repository)
+  );
 }
 
 export async function searchSecureNotes(
   notes: readonly SearchableSecureNote[],
   queryText: string,
-  options: LocalSearchOptions = {}
+  options: LocalSearchRuntimeOptions = {}
 ): Promise<LocalSearchResult[]> {
   const query = sanitizeSearchQuery(queryText);
   const limit = normalizeLimit(options.limit);
   const mode = options.mode ?? "hybrid";
+  const repository = options.repository ?? getDefaultLocalSearchRepository();
 
   if (!query.normalized || query.tokens.length === 0) {
     return [];
   }
 
   const lexicalCandidates = mode === "semantic" ? [] : createLexicalCandidates(notes, query, limit);
-  const semanticCandidates = mode === "lexical" ? [] : await createSemanticCandidates(query.normalized, limit);
+  const semanticCandidates = mode === "lexical" ? [] : await createSemanticCandidates(query.normalized, limit, repository);
   const fusedCandidates = selectCandidates(mode, lexicalCandidates, semanticCandidates, limit);
   const lexicalIds = new Set(lexicalCandidates.map((candidate) => candidate.id));
   const semanticIds = new Set(semanticCandidates.map((candidate) => candidate.id));
@@ -176,7 +166,8 @@ export async function searchSecureNotes(
 }
 
 export async function runLocalSearchSmokeTest(): Promise<boolean> {
-  await ensureLocalSearchSchema();
+  const repository = getDefaultLocalSearchRepository();
+  await ensureLocalSearchSchema(repository);
   const id = `smoke-${crypto.randomUUID()}`;
   const note = {
     id,
@@ -185,64 +176,29 @@ export async function runLocalSearchSmokeTest(): Promise<boolean> {
     updatedAt: new Date().toISOString()
   };
 
-  await indexSecureNoteForSearch(note);
-  const semanticCandidates = await createSemanticCandidates("hybrid smoke", 5);
-  await removeSecureNoteFromSearchIndex(id);
+  await indexSecureNoteForSearch(note, repository);
+  const semanticCandidates = await createSemanticCandidates("hybrid smoke", 5, repository);
+  await removeSecureNoteFromSearchIndex(id, repository);
   return semanticCandidates.some((candidate) => candidate.id === id);
 }
 
-async function initializeLocalSearchSchema(): Promise<void> {
-  const db = await getLocalDb();
-
-  await db.exec(`
-    CREATE EXTENSION IF NOT EXISTS vector;
-
-    CREATE TABLE IF NOT EXISTS local_search_chunks (
-      id TEXT PRIMARY KEY,
-      record_id TEXT NOT NULL,
-      record_type TEXT NOT NULL,
-      chunk_index INTEGER NOT NULL,
-      source_updated_at TEXT NOT NULL,
-      embedding vector(${LOCAL_EMBEDDING_DIMENSIONS}) NOT NULL,
-      embedding_model TEXT NOT NULL,
-      schema_version INTEGER NOT NULL DEFAULT ${LOCAL_SEARCH_SCHEMA_VERSION},
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      deleted_at TEXT,
-      UNIQUE (record_id, record_type, chunk_index)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_local_search_chunks_record
-      ON local_search_chunks (record_id, record_type)
-      WHERE deleted_at IS NULL;
-
-    CREATE INDEX IF NOT EXISTS idx_local_search_chunks_embedding
-      ON local_search_chunks USING hnsw (embedding vector_cosine_ops);
-  `);
-}
-
-async function createSemanticCandidates(queryText: string, limit: number): Promise<RankedSearchCandidate[]> {
+async function createSemanticCandidates(
+  queryText: string,
+  limit: number,
+  repository = getDefaultLocalSearchRepository()
+): Promise<RankedSearchCandidate[]> {
   try {
-    await ensureLocalSearchSchema();
-    const db = await getLocalDb();
+    await ensureLocalSearchSchema(repository);
     const embeddingProvider = getActiveLocalEmbeddingProvider();
     const queryEmbedding = toPgVector(await createQueryEmbeddingWithProvider(queryText));
-    const result = await db.query<SemanticSearchRow>(
-      `SELECT record_id, embedding <=> $1::vector AS distance
-       FROM local_search_chunks
-       WHERE record_type = $2
-         AND embedding_model = $3
-         AND schema_version = $4
-         AND deleted_at IS NULL
-       ORDER BY embedding <=> $1::vector
-       LIMIT $5`,
-      [queryEmbedding, "secure_note", embeddingProvider.id, LOCAL_SEARCH_SCHEMA_VERSION, limit]
-    );
 
-    return result.rows.map((row) => ({
-      id: row.record_id,
-      score: Math.max(0, 1 - Number(row.distance))
-    }));
+    return repository.findSemanticCandidates({
+      recordType: "secure_note",
+      embedding: queryEmbedding,
+      embeddingModel: embeddingProvider.id,
+      schemaVersion: LOCAL_SEARCH_SCHEMA_VERSION,
+      limit
+    });
   } catch (error) {
     console.warn("Unable to run semantic local search", error);
     return [];
