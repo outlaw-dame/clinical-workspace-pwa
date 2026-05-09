@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Clinical Workspace icon</title>
+  <desc id="desc">Rounded shield inside a soft Apple-like app tile.</desc>
+  <defs>
+    <linearGradient id="bg" x1="80" y1="40" x2="432" y2="472" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F9F9FB" />
+      <stop offset="1" stop-color="#E9E8FF" />
+    </linearGradient>
+    <linearGradient id="shield" x1="156" y1="104" x2="356" y2="408" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7C70FF" />
+      <stop offset="1" stop-color="#4A3FE8" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#bg)" />
+  <path d="M256 92 374 136v92c0 90-48 157-118 192-70-35-118-102-118-192v-92l118-44Z" fill="url(#shield)" />
+  <path d="m208 250 34 34 72-82" fill="none" stroke="white" stroke-width="32" stroke-linecap="round" stroke-linejoin="round" />
+</svg>
