@@ -10,6 +10,13 @@ describe("sanitizeSearchQuery", () => {
     expect(query.tokens).toEqual(["sleep", "issues", "after", "medication", "change"]);
   });
 
+  it("uses locale-independent lowercasing for deterministic query embeddings", () => {
+    const query = sanitizeSearchQuery("INDIGO INITIAL INTAKE");
+
+    expect(query.normalized).toBe("indigo initial intake");
+    expect(query.tokens).toEqual(["indigo", "initial", "intake"]);
+  });
+
   it("drops one-character tokens and bounds token count", () => {
     const query = sanitizeSearchQuery("a bb cc dd ee ff gg hh ii jj kk ll mm nn oo pp");
 
@@ -30,6 +37,12 @@ describe("createSafePreview", () => {
 
     expect(preview).toContain("sleep trouble");
     expect(preview.length).toBeLessThanOrEqual(98);
+  });
+
+  it("matches previews with locale-independent lowercasing", () => {
+    const preview = createSafePreview("Follow up on INITIAL intake paperwork.", sanitizeSearchQuery("initial"), 32);
+
+    expect(preview).toContain("INITIAL intake");
   });
 
   it("uses a safe fallback for blank note bodies", () => {
