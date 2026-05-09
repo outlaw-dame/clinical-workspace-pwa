@@ -1,21 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
-import { createPgliteLocalSearchRepository } from "./searchRepository";
+import { createPgliteLocalSearchRepository, type SearchDb } from "./searchRepository";
 
 type CapturedQuery = {
   sql: string;
-  params: readonly unknown[] | undefined;
+  params: unknown[] | undefined;
 };
 
 function createMockSearchDb(rows: unknown[] = []) {
   const capturedQueries: CapturedQuery[] = [];
   const exec = vi.fn(async (_sql: string) => undefined);
-  const query = vi.fn(async <T>(sql: string, params?: readonly unknown[]) => {
+  const query: SearchDb["query"] = async <T>(sql: string, params?: unknown[]) => {
     capturedQueries.push({ sql, params });
     return { rows: rows as T[] };
-  });
+  };
+  const queryMock = vi.fn(query);
 
   return {
-    db: { exec, query },
+    db: { exec, query: queryMock } satisfies SearchDb,
     capturedQueries
   };
 }
