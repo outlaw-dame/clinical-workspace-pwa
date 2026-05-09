@@ -6,6 +6,12 @@ type WorkerRequest =
   | { id: string; type: "decrypt"; payload: EncryptedPayload }
   | { id: string; type: "clear" };
 
+type WorkerRequestBody =
+  | { type: "initialize" }
+  | { type: "encrypt"; plaintext: string }
+  | { type: "decrypt"; payload: EncryptedPayload }
+  | { type: "clear" };
+
 type WorkerResponse =
   | { id: string; ok: true; type: "initialized" }
   | { id: string; ok: true; type: "encrypted"; payload: EncryptedPayload }
@@ -85,10 +91,10 @@ export async function clearCryptoSession(): Promise<void> {
   }
 }
 
-async function request(message: Omit<WorkerRequest, "id">): Promise<WorkerResponse> {
+async function request(message: WorkerRequestBody): Promise<WorkerResponse> {
   const activeWorker = getWorker();
   const id = crypto.randomUUID();
-  const requestMessage = { ...message, id } as WorkerRequest;
+  const requestMessage: WorkerRequest = { ...message, id };
 
   return new Promise<WorkerResponse>((resolve, reject) => {
     const timeoutId = window.setTimeout(() => {
