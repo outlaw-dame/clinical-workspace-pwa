@@ -61,7 +61,8 @@ export async function getLocalDb(): Promise<PGlite> {
 }
 
 async function createLocalDb(): Promise<PGlite> {
-  const db = await PGlite.create("idb://clinical-workspace", {
+  const db = new PGlite({
+    dataDir: "idb://clinical-workspace",
     extensions: { vector }
   });
   await db.exec(schema);
