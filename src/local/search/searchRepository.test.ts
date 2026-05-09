@@ -8,10 +8,13 @@ type CapturedQuery = {
 
 function createMockSearchDb(rows: unknown[] = []) {
   const capturedQueries: CapturedQuery[] = [];
-  const exec = vi.fn(async (_sql: string) => undefined);
-  const query: SearchDb["query"] = async <T>(sql: string, params?: unknown[]) => {
+  const exec = vi.fn((sql: string) => {
+    void sql;
+    return Promise.resolve(undefined);
+  });
+  const query: SearchDb["query"] = <T>(sql: string, params?: unknown[]) => {
     capturedQueries.push({ sql, params });
-    return { rows: rows as T[] };
+    return Promise.resolve({ rows: rows as T[] });
   };
 
   return {
@@ -23,7 +26,7 @@ function createMockSearchDb(rows: unknown[] = []) {
 describe("createPgliteLocalSearchRepository", () => {
   it("initializes the pgvector-backed local search schema", async () => {
     const { db } = createMockSearchDb();
-    const repository = createPgliteLocalSearchRepository(async () => db);
+    const repository = createPgliteLocalSearchRepository(() => Promise.resolve(db));
 
     await repository.ensureSchema();
 
@@ -35,7 +38,7 @@ describe("createPgliteLocalSearchRepository", () => {
 
   it("upserts search chunks with stable ordered parameters", async () => {
     const { db, capturedQueries } = createMockSearchDb();
-    const repository = createPgliteLocalSearchRepository(async () => db);
+    const repository = createPgliteLocalSearchRepository(() => Promise.resolve(db));
 
     await repository.upsertSearchChunk({
       id: "note-1:0",
@@ -68,7 +71,7 @@ describe("createPgliteLocalSearchRepository", () => {
 
   it("soft-deletes active chunks for a record", async () => {
     const { capturedQueries, db } = createMockSearchDb();
-    const repository = createPgliteLocalSearchRepository(async () => db);
+    const repository = createPgliteLocalSearchRepository(() => Promise.resolve(db));
 
     await repository.markRecordDeleted("secure_note", "note-1", "2026-05-03T00:00:00.000Z");
 
@@ -84,7 +87,7 @@ describe("createPgliteLocalSearchRepository", () => {
       }
     ];
     const { capturedQueries, db } = createMockSearchDb(rows);
-    const repository = createPgliteLocalSearchRepository(async () => db);
+    const repository = createPgliteLocalSearchRepository(() => Promise.resolve(db));
 
     await expect(repository.listActiveChunkSnapshots("secure_note", 0)).resolves.toEqual(rows);
     expect(capturedQueries[0]?.sql).toContain("SELECT record_id, source_updated_at");
@@ -96,7 +99,7 @@ describe("createPgliteLocalSearchRepository", () => {
       { record_id: "near-note", distance: 0.15 },
       { record_id: "far-note", distance: 1.5 }
     ]);
-    const repository = createPgliteLocalSearchRepository(async () => db);
+    const repository = createPgliteLocalSearchRepository(() => Promise.resolve(db));
 
     await expect(
       repository.findSemanticCandidates({
