@@ -6,6 +6,17 @@ export type LocalEmbeddingModelQuality = "fallback" | "candidate" | "validated";
 
 export type LocalEmbeddingArtifactSource = "bundled" | "origin-cache" | "user-provided";
 
+export type LocalEmbeddingDtype = "fp32" | "q8" | "q4";
+
+export type LocalEmbeddingActivationState = "active" | "candidate" | "disabled";
+
+export type LocalEmbeddingPromptPolicy = {
+  queryPrefix: string;
+  documentTitlePrefix: string;
+  documentTextPrefix: string;
+  documentSeparator: string;
+};
+
 export type LocalEmbeddingModelManifest = {
   id: string;
   displayName: string;
@@ -16,5 +27,12 @@ export type LocalEmbeddingModelManifest = {
   privacyBoundary: LocalEmbeddingPrivacyBoundary;
   quality: LocalEmbeddingModelQuality;
   artifactSource: LocalEmbeddingArtifactSource;
+  activationState: LocalEmbeddingActivationState;
   artifactSha256?: string;
+  baseModelId?: string;
+  baseDimensions?: number;
+  supportedDimensions?: readonly number[];
+  defaultDtype?: LocalEmbeddingDtype;
+  fallbackDtypes?: readonly LocalEmbeddingDtype[];
+  promptPolicy?: LocalEmbeddingPromptPolicy;
 };
