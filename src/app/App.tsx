@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Match, Show, Switch, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import { AppSymbol, type SymbolName } from "../design/icons";
 import { runCryptoSmokeTest } from "../local/crypto/envelope";
 import { clearCryptoSession, initializeCryptoSession } from "../local/crypto/workerClient";
@@ -279,18 +279,37 @@ function TabContent(props: {
   capabilities: AppCapabilities;
   diagnostics: Diagnostic[];
 }) {
-  switch (props.activeTab) {
-    case "today":
-      return <TodayView capabilities={props.capabilities} diagnostics={props.diagnostics} />;
-    case "chat":
-      return <PlaceholderView icon="chat" title="Secure chat" body="Local optimistic messaging, encrypted attachments, and sync outbox behavior come after the foundation is stable." />;
-    case "notes":
-      return <NotesView />;
-    case "calendar":
-      return <PlaceholderView icon="calendar" title="Calendar" body="Appointments, reminders, availability, and follow-ups will stay local-first with push and ICS integrations as progressive enhancements." />;
-    case "documents":
-      return <PlaceholderView icon="documents" title="Document vault" body="Documents belong in encrypted OPFS blobs locally, with encrypted remote object sync later." />;
-  }
+  return (
+    <Switch>
+      <Match when={props.activeTab === "today"}>
+        <TodayView capabilities={props.capabilities} diagnostics={props.diagnostics} />
+      </Match>
+      <Match when={props.activeTab === "chat"}>
+        <PlaceholderView
+          icon="chat"
+          title="Secure chat"
+          body="Local optimistic messaging, encrypted attachments, and sync outbox behavior come after the foundation is stable."
+        />
+      </Match>
+      <Match when={props.activeTab === "notes"}>
+        <NotesView />
+      </Match>
+      <Match when={props.activeTab === "calendar"}>
+        <PlaceholderView
+          icon="calendar"
+          title="Calendar"
+          body="Appointments, reminders, availability, and follow-ups will stay local-first with push and ICS integrations as progressive enhancements."
+        />
+      </Match>
+      <Match when={props.activeTab === "documents"}>
+        <PlaceholderView
+          icon="documents"
+          title="Document vault"
+          body="Documents belong in encrypted OPFS blobs locally, with encrypted remote object sync later."
+        />
+      </Match>
+    </Switch>
+  );
 }
 
 function TodayView(props: { capabilities: AppCapabilities; diagnostics: Diagnostic[] }) {
