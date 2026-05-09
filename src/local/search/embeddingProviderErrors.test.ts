@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { LocalEmbeddingAbortError } from "./embeddingProvider";
 import {
   LocalEmbeddingProviderError,
   normalizeLocalEmbeddingProviderError
@@ -9,6 +10,13 @@ describe("normalizeLocalEmbeddingProviderError", () => {
     const error = new LocalEmbeddingProviderError("model_not_loaded", "Model is not loaded");
 
     expect(normalizeLocalEmbeddingProviderError(error)).toBe(error);
+  });
+
+  it("preserves cancellation as an aborted provider error", () => {
+    const normalized = normalizeLocalEmbeddingProviderError(new LocalEmbeddingAbortError());
+
+    expect(normalized.code).toBe("aborted");
+    expect(normalized.message).toBe("Local embedding generation was aborted");
   });
 
   it("normalizes unknown errors without exposing raw input text", () => {
