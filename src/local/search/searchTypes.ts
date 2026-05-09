@@ -4,6 +4,18 @@ export type LocalSearchMode = "lexical" | "semantic" | "hybrid";
 
 export type LocalSearchMatchKind = "lexical" | "semantic" | "hybrid";
 
+export type SearchableSecureNote = {
+  id: string;
+  title: string;
+  body: string;
+  updatedAt: string;
+};
+
+export type SearchIndexChunkSnapshot = {
+  record_id: string;
+  source_updated_at: string;
+};
+
 export type LocalSearchResult = {
   id: string;
   recordId: string;
