@@ -1,7 +1,5 @@
 import { sanitizeSearchQuery } from "./searchSanitization";
-
-export const LOCAL_EMBEDDING_DIMENSIONS = 64;
-export const LOCAL_EMBEDDING_MODEL = "deterministic-local-token-hash-v1";
+import { LOCAL_EMBEDDING_DIMENSIONS } from "./searchConfig";
 
 const MAX_EMBEDDING_TEXT_LENGTH = 8_000;
 const TOKEN_PATTERN = /[\p{L}\p{N}][\p{L}\p{N}'-]*/gu;
