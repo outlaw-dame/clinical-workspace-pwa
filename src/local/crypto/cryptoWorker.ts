@@ -16,6 +16,11 @@ type WorkerResponse =
 
 const KEY_LENGTH = 256;
 const NONCE_BYTES = 12;
+const KEY_DATABASE_NAME = "clinical-workspace-key-store";
+const KEY_DATABASE_VERSION = 1;
+const KEY_STORE_NAME = "keys";
+const DATA_KEY_ID = "local-notes-data-key";
+
 let dataKey: CryptoKey | undefined;
 
 self.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
@@ -26,11 +31,7 @@ async function handleRequest(request: WorkerRequest): Promise<void> {
   try {
     switch (request.type) {
       case "initialize":
-        dataKey = await crypto.subtle.generateKey(
-          { name: ENCRYPTION_ALGORITHM, length: KEY_LENGTH },
-          false,
-          ["encrypt", "decrypt"]
-        );
+        dataKey = await loadOrCreateDataKey();
         postResponse({ id: request.id, ok: true, type: "initialized" });
         return;
       case "encrypt":
@@ -57,6 +58,19 @@ async function handleRequest(request: WorkerRequest): Promise<void> {
   } catch (error) {
     postResponse({ id: request.id, ok: false, error: toSafeErrorMessage(error) });
   }
+}
+
+async function loadOrCreateDataKey(): Promise<CryptoKey> {
+  const existingKey = await readStoredDataKey();
+  if (existingKey) return existingKey;
+
+  const newKey = await crypto.subtle.generateKey(
+    { name: ENCRYPTION_ALGORITHM, length: KEY_LENGTH },
+    false,
+    ["encrypt", "decrypt"]
+  );
+  await writeStoredDataKey(newKey);
+  return newKey;
 }
 
 async function encryptWithSessionKey(plaintext: string): Promise<EncryptedPayload> {
@@ -95,6 +109,50 @@ function requireDataKey(): CryptoKey {
   }
 
   return dataKey;
+}
+
+async function readStoredDataKey(): Promise<CryptoKey | undefined> {
+  const database = await openKeyDatabase();
+
+  try {
+    return await runKeyStoreRequest<CryptoKey | undefined>(
+      database.transaction(KEY_STORE_NAME, "readonly").objectStore(KEY_STORE_NAME).get(DATA_KEY_ID)
+    );
+  } finally {
+    database.close();
+  }
+}
+
+async function writeStoredDataKey(key: CryptoKey): Promise<void> {
+  const database = await openKeyDatabase();
+
+  try {
+    await runKeyStoreRequest(
+      database.transaction(KEY_STORE_NAME, "readwrite").objectStore(KEY_STORE_NAME).put(key, DATA_KEY_ID)
+    );
+  } finally {
+    database.close();
+  }
+}
+
+function openKeyDatabase(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(KEY_DATABASE_NAME, KEY_DATABASE_VERSION);
+
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore(KEY_STORE_NAME);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error("Failed to open key database"));
+    request.onblocked = () => reject(new Error("Key database open request was blocked"));
+  });
+}
+
+function runKeyStoreRequest<Result>(request: IDBRequest<Result>): Promise<Result> {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error("Key database request failed"));
+  });
 }
 
 function toSafeErrorMessage(error: unknown): string {
