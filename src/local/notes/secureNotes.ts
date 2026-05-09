@@ -63,20 +63,18 @@ export async function listSecureNotes(): Promise<SecureNote[]> {
      ORDER BY updated_at DESC`
   );
 
-  const notes: SecureNote[] = [];
-
-  for (const row of result.rows) {
-    const payload = await decryptNotePayload(row.encrypted_payload);
-    notes.push({
-      id: row.id,
-      title: payload.title,
-      body: payload.body,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    });
-  }
-
-  return notes;
+  return Promise.all(
+    result.rows.map(async (row): Promise<SecureNote> => {
+      const payload = await decryptNotePayload(row.encrypted_payload);
+      return {
+        id: row.id,
+        title: payload.title,
+        body: payload.body,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      };
+    })
+  );
 }
 
 export async function softDeleteSecureNote(noteId: string): Promise<void> {
