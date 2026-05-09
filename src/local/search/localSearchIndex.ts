@@ -41,11 +41,12 @@ const REPAIR_DEBOUNCE_MS = 500;
 let defaultSearchSchemaPromise: Promise<void> | undefined;
 
 export async function ensureLocalSearchSchema(repository?: LocalSearchRepository): Promise<void> {
-  if (repository) {
+  const defaultRepository = getDefaultLocalSearchRepository();
+
+  if (repository !== undefined && repository !== defaultRepository) {
     return repository.ensureSchema();
   }
 
-  const defaultRepository = getDefaultLocalSearchRepository();
   defaultSearchSchemaPromise ??= defaultRepository.ensureSchema();
   return defaultSearchSchemaPromise;
 }
