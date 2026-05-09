@@ -10,6 +10,8 @@ type WorkspaceServiceWorkerScope = ServiceWorkerGlobalScope &
     __WB_MANIFEST: WorkboxManifestEntry[];
   };
 
+type SkipWaitingMessage = { type: "SKIP_WAITING" };
+
 const serviceWorker = self as unknown as WorkspaceServiceWorkerScope;
 
 // Vite injects the app-shell asset manifest here at build time.
@@ -38,7 +40,15 @@ registerRoute(
 );
 
 serviceWorker.addEventListener("message", (event: ExtendableMessageEvent) => {
-  if (event.data && event.data.type === "SKIP_WAITING") {
+  if (isSkipWaitingMessage(event.data)) {
     void serviceWorker.skipWaiting();
   }
 });
+
+function isSkipWaitingMessage(data: unknown): data is SkipWaitingMessage {
+  if (typeof data !== "object" || data === null || !("type" in data)) {
+    return false;
+  }
+
+  return (data as { type?: unknown }).type === "SKIP_WAITING";
+}
