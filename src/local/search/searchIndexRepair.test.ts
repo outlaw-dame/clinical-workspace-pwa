@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createDebouncedSearchIndexRepairScheduler,
   planSecureNoteSearchIndexRepair,
@@ -42,6 +42,11 @@ const indexedRows: SearchIndexChunkSnapshot[] = [
   }
 ];
 
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
+
 describe("planSecureNoteSearchIndexRepair", () => {
   it("identifies stale, missing, and removed search records", () => {
     const plan = planSecureNoteSearchIndexRepair(notes, indexedRows);
@@ -79,7 +84,7 @@ describe("runInBatches", () => {
 describe("createDebouncedSearchIndexRepairScheduler", () => {
   it("debounces repair requests and repairs the latest cloned items", async () => {
     vi.useFakeTimers();
-    const repair = vi.fn<[], Promise<void>>().mockResolvedValue(undefined);
+    const repair = vi.fn().mockResolvedValue(undefined);
     const firstItems = [{ id: "first" }];
     const secondItems = [{ id: "second" }];
     const scheduleRepair = createDebouncedSearchIndexRepairScheduler({
@@ -98,8 +103,6 @@ describe("createDebouncedSearchIndexRepairScheduler", () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(repair).toHaveBeenCalledTimes(1);
     expect(repair).toHaveBeenCalledWith([{ id: "second" }]);
-
-    vi.useRealTimers();
   });
 
   it("reports async repair errors without throwing from the scheduler", async () => {
@@ -117,6 +120,5 @@ describe("createDebouncedSearchIndexRepairScheduler", () => {
     await vi.advanceTimersByTimeAsync(1);
 
     expect(onError).toHaveBeenCalledWith(error);
-    vi.useRealTimers();
   });
 });
