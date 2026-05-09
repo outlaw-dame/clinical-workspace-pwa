@@ -1,6 +1,10 @@
 import type { EncryptedPayload } from "../crypto/envelope";
 import { decryptInCryptoWorker, encryptInCryptoWorker } from "../crypto/workerClient";
 import { getLocalDb } from "../db/client";
+import {
+  indexSecureNoteForSearchSafely,
+  removeSecureNoteFromSearchIndexSafely
+} from "../search/localSearchIndex";
 import { replaceUnsafeControlCharacters } from "../../shared/textSanitation";
 
 type SecureNotePayload = {
@@ -45,13 +49,16 @@ export async function createSecureNote(draft: SecureNoteDraft): Promise<SecureNo
     [id, JSON.stringify(encryptedPayload), now, now]
   );
 
-  return {
+  const note = {
     id,
     title: payload.title,
     body: payload.body,
     createdAt: now,
     updatedAt: now
   };
+
+  void indexSecureNoteForSearchSafely(note);
+  return note;
 }
 
 export async function listSecureNotes(): Promise<SecureNote[]> {
@@ -83,6 +90,7 @@ export async function softDeleteSecureNote(noteId: string): Promise<void> {
     new Date().toISOString(),
     noteId
   ]);
+  void removeSecureNoteFromSearchIndexSafely(noteId);
 }
 
 async function decryptNotePayload(encryptedPayloadJson: string): Promise<SecureNotePayload> {
