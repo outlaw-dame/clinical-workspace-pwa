@@ -79,7 +79,17 @@ Local semantic search uses an explicit embedding-provider boundary:
 - the deterministic token-hash provider is a local fallback and test scaffold, not the final clinical semantic model;
 - real model work must use the embedding runtime scaffold: manifest validation, runtime capability checks, worker request/response contracts, and privacy-safe provider errors.
 
-The current embedding runtime scaffold intentionally stops before model selection. It does not add an ML dependency, choose a model, or switch the active provider away from the deterministic fallback.
+EmbeddingGemma 300M is the preferred candidate model, but it is not active yet:
+
+- active provider remains the deterministic fallback;
+- candidate runtime is `local-transformer-worker`;
+- candidate package target is `onnx-community/embeddinggemma-300m-ONNX`;
+- base model reference is `google/embeddinggemma-300m`;
+- selected index dimensions are 256 from a 768-dimensional base embedding;
+- supported dimensions are 768, 512, 256, and 128;
+- default dtype is `q4`, with `q8` and `fp32` fallbacks;
+- prompt policy is centralized for query and document embedding inputs;
+- the model revision must be pinned before activation.
 
 The current passkey flow proves a local browser authenticator ceremony and gates the local workspace. Production sync/session trust still requires server-issued WebAuthn challenges and server-side signature verification.
 
@@ -92,7 +102,7 @@ The current passkey flow proves a local browser authenticator ceremony and gates
 - Encrypted secure notes
 - Local hybrid search over secure notes
 - Local embedding-provider boundary with deterministic fallback provider
-- Local embedding runtime scaffold before model selection
+- Local embedding runtime scaffold with EmbeddingGemma candidate manifest
 - Injectable local search repository boundary
 - Privacy-safe audit-event writes with serialized hash-chain updates
 - Background/batched search-index repair
@@ -102,12 +112,14 @@ The current passkey flow proves a local browser authenticator ceremony and gates
 
 ## Next implementation phase
 
-1. Choose the first real local embedding model and runtime package.
-2. Replace the deterministic fallback embedding provider with a real local provider behind worker, cancellation, model-version, and reindex boundaries.
-3. Add chat message model, local optimistic send, and sync outbox operations with exponential backoff and idempotency.
-4. Add document import flow that encrypts before writing to OPFS.
-5. Add task and calendar records that fit the Today/Chat/Notes/Calendar surfaces rather than becoming a separate project-management module.
-6. Expand audit coverage around lock/unlock, document access, local writes, and sync attempts without storing PHI in logs.
+1. Pin the EmbeddingGemma ONNX model revision and artifact integrity policy.
+2. Add the local transformer worker package and worker-backed provider without activating it by default.
+3. Add 768-to-256 truncation, re-normalization, and result dimension validation.
+4. Add reindex planning for the future 256-dimensional EmbeddingGemma index while preserving the 64-dimensional fallback index.
+5. Add chat message model, local optimistic send, and sync outbox operations with exponential backoff and idempotency.
+6. Add document import flow that encrypts before writing to OPFS.
+7. Add task and calendar records that fit the Today/Chat/Notes/Calendar surfaces rather than becoming a separate project-management module.
+8. Expand audit coverage around lock/unlock, document access, local writes, and sync attempts without storing PHI in logs.
 
 ## Compliance note
 
