@@ -44,7 +44,14 @@ npm run build
 
 CI runs install, typecheck, lint, tests, and production build on pull requests and pushes to `master`.
 
-New behavior should include sensible tests where practical. Pure ranking, sanitation, queueing, crypto adapters, retry logic, and policy helpers should be covered with focused unit tests. Browser/PWA surfaces can be covered incrementally as the test harness matures.
+New behavior should include sensible tests where practical. Focused unit tests should cover:
+
+- pure ranking and sanitation;
+- queueing and retry logic;
+- crypto adapters;
+- policy helpers.
+
+Browser/PWA surfaces can be covered incrementally as the test harness matures.
 
 ## Important security rules
 

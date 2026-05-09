@@ -16,6 +16,12 @@ export type AppCapabilities = {
   coarsePointer: boolean;
 };
 
+type NavigatorWithOptionalStorage = Navigator & {
+  storage?: {
+    getDirectory?: unknown;
+  };
+};
+
 function detectPlatform(): PlatformKind {
   const userAgent = navigator.userAgent.toLowerCase();
   const platform = navigator.platform.toLowerCase();
@@ -33,6 +39,7 @@ function detectPlatform(): PlatformKind {
 export function detectCapabilities(): AppCapabilities {
   const standaloneQuery = window.matchMedia("(display-mode: standalone)").matches;
   const legacyStandalone = Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
+  const storage = (navigator as NavigatorWithOptionalStorage).storage;
 
   return {
     platform: detectPlatform(),
@@ -43,9 +50,7 @@ export function detectCapabilities(): AppCapabilities {
       "PushManager" in window &&
       "Notification" in window,
     serviceWorker: "serviceWorker" in navigator,
-    opfs:
-      "storage" in navigator &&
-      typeof navigator.storage.getDirectory === "function",
+    opfs: typeof storage?.getDirectory === "function",
     webAuthn: "PublicKeyCredential" in window && "credentials" in navigator,
     webCrypto: "crypto" in globalThis && "subtle" in globalThis.crypto,
     filePicker: "showOpenFilePicker" in window,
