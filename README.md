@@ -68,7 +68,8 @@ Local search follows the same privacy boundary:
 - decrypted note text is not persisted in search tables;
 - local search chunks store derived metadata, source timestamps, schema/model metadata, and vectors;
 - query text is not written to audit metadata;
-- previews are generated from decrypted in-memory notes only after unlock.
+- previews are generated from decrypted in-memory notes only after unlock;
+- direct PGlite search SQL should stay behind the local search repository boundary.
 
 Local semantic search uses an explicit embedding-provider boundary:
 
@@ -88,6 +89,7 @@ The current passkey flow proves a local browser authenticator ceremony and gates
 - Encrypted secure notes
 - Local hybrid search over secure notes
 - Local embedding-provider boundary with deterministic fallback provider
+- Injectable local search repository boundary
 - Privacy-safe audit-event writes with serialized hash-chain updates
 - Background/batched search-index repair
 - Placeholder surfaces for Chat, Calendar, and Documents
@@ -96,12 +98,11 @@ The current passkey flow proves a local browser authenticator ceremony and gates
 
 ## Next implementation phase
 
-1. Add an injectable search repository layer and integration-style tests around local schema/indexing.
-2. Replace the deterministic fallback embedding provider with a real local provider behind worker, cancellation, model-version, and reindex boundaries.
-3. Add chat message model, local optimistic send, and sync outbox operations with exponential backoff and idempotency.
-4. Add document import flow that encrypts before writing to OPFS.
-5. Add task and calendar records that fit the Today/Chat/Notes/Calendar surfaces rather than becoming a separate project-management module.
-6. Expand audit coverage around lock/unlock, document access, local writes, and sync attempts without storing PHI in logs.
+1. Replace the deterministic fallback embedding provider with a real local provider behind worker, cancellation, model-version, and reindex boundaries.
+2. Add chat message model, local optimistic send, and sync outbox operations with exponential backoff and idempotency.
+3. Add document import flow that encrypts before writing to OPFS.
+4. Add task and calendar records that fit the Today/Chat/Notes/Calendar surfaces rather than becoming a separate project-management module.
+5. Expand audit coverage around lock/unlock, document access, local writes, and sync attempts without storing PHI in logs.
 
 ## Compliance note
 
