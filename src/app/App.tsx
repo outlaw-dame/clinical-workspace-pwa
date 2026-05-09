@@ -89,6 +89,8 @@ export function App() {
       } else {
         await registerLocalPasskey();
       }
+    } else if (await hasLocalPasskey()) {
+      throw new Error("Passkey authentication is required for this workspace");
     }
 
     await initializeCryptoSession();
@@ -212,15 +214,17 @@ function SecureLockScreen(props: {
           {busy() ? "Unlocking..." : passkeyLabel()}
         </button>
 
-        <button
-          class="secondary-button"
-          type="button"
-          disabled={busy() || !props.capabilities.webCrypto}
-          onClick={() => void unlock("foundation")}
-        >
-          <AppSymbol name="unlock" />
-          Foundation unlock
-        </button>
+        <Show when={hasPasskey() === false}>
+          <button
+            class="secondary-button"
+            type="button"
+            disabled={busy() || !props.capabilities.webCrypto}
+            onClick={() => void unlock("foundation")}
+          >
+            <AppSymbol name="unlock" />
+            Foundation unlock
+          </button>
+        </Show>
       </section>
     </main>
   );
