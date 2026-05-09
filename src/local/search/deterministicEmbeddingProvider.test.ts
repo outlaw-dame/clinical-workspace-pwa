@@ -22,16 +22,16 @@ describe("deterministicLocalEmbeddingProvider", () => {
     expect(directQueryEmbedding).toEqual(normalizedDocumentEmbedding);
   });
 
-  it("supports cancellation before token processing", async () => {
+  it("supports cancellation before token processing", () => {
     const controller = new AbortController();
     controller.abort();
 
-    await expect(
+    expect(() =>
       deterministicLocalEmbeddingProvider.createEmbedding({
         text: "sleep stress",
         purpose: "document",
         signal: controller.signal
       })
-    ).rejects.toThrow("Local embedding generation was aborted");
+    ).toThrow("Local embedding generation was aborted");
   });
 });
