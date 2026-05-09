@@ -28,13 +28,20 @@ let initializePromise: Promise<void> | undefined;
 
 export async function initializeCryptoSession(): Promise<void> {
   if (initialized) return;
-  initializePromise ??= request({ type: "initialize" }).then((response) => {
-    if (!response.ok || response.type !== "initialized") {
-      throw new Error("Crypto worker failed to initialize");
-    }
+  initializePromise ??= request({ type: "initialize" })
+    .then((response) => {
+      if (!response.ok || response.type !== "initialized") {
+        throw new Error("Crypto worker failed to initialize");
+      }
 
-    initialized = true;
-  });
+      initialized = true;
+    })
+    .catch((error: unknown) => {
+      initialized = false;
+      initializePromise = undefined;
+      terminateWorker();
+      throw error;
+    });
 
   return initializePromise;
 }
@@ -63,18 +70,19 @@ export async function decryptInCryptoWorker(payload: EncryptedPayload): Promise<
 
 export async function clearCryptoSession(): Promise<void> {
   if (!worker) {
-    initialized = false;
-    initializePromise = undefined;
+    resetSessionState();
     return;
   }
 
-  const response = await request({ type: "clear" });
-  if (!response.ok || response.type !== "cleared") {
-    throw new Error("Crypto worker failed to clear the session");
+  try {
+    const response = await request({ type: "clear" });
+    if (!response.ok || response.type !== "cleared") {
+      throw new Error("Crypto worker failed to clear the session");
+    }
+  } finally {
+    resetSessionState();
+    terminateWorker();
   }
-
-  initialized = false;
-  initializePromise = undefined;
 }
 
 async function request(message: Omit<WorkerRequest, "id">): Promise<WorkerResponse> {
@@ -127,8 +135,16 @@ function handleWorkerError(event: ErrorEvent): void {
     pendingRequests.delete(id);
   }
 
+  resetSessionState();
+  terminateWorker();
+}
+
+function resetSessionState(): void {
   initialized = false;
   initializePromise = undefined;
+}
+
+function terminateWorker(): void {
   worker?.terminate();
   worker = undefined;
 }
