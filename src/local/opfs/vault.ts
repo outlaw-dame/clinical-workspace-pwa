@@ -7,14 +7,14 @@ export type VaultWriteResult = {
 
 const VAULT_DIRECTORY = "encrypted-vault";
 
-export async function assertOpfsAvailable(): Promise<void> {
+export function assertOpfsAvailable(): void {
   if (!("storage" in navigator) || typeof navigator.storage.getDirectory !== "function") {
     throw new Error("OPFS is not available in this browser.");
   }
 }
 
 async function getVaultDirectory(): Promise<FileSystemDirectoryHandle> {
-  await assertOpfsAvailable();
+  assertOpfsAvailable();
   const root = await navigator.storage.getDirectory();
   return root.getDirectoryHandle(VAULT_DIRECTORY, { create: true });
 }
