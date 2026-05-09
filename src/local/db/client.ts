@@ -12,6 +12,23 @@ CREATE TABLE IF NOT EXISTS local_records (
   deleted_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS secure_notes (
+  id TEXT PRIMARY KEY,
+  encrypted_payload TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  deleted_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS webauthn_credentials (
+  id TEXT PRIMARY KEY,
+  credential_id TEXT NOT NULL UNIQUE,
+  user_handle TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_used_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS audit_events (
   id TEXT PRIMARY KEY,
   action TEXT NOT NULL,

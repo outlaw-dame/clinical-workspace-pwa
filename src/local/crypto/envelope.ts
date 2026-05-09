@@ -1,4 +1,6 @@
-const ENCRYPTION_ALGORITHM = "AES-GCM";
+import { decodeBase64, encodeBase64 } from "./base64";
+
+export const ENCRYPTION_ALGORITHM = "AES-GCM";
 const KEY_LENGTH = 256;
 const NONCE_BYTES = 12;
 
@@ -47,23 +49,6 @@ export async function decryptText(payload: EncryptedPayload, key: CryptoKey): Pr
   );
 
   return new TextDecoder().decode(decrypted);
-}
-
-export function encodeBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
-}
-
-export function decodeBase64(value: string): Uint8Array<ArrayBuffer> {
-  const binary = atob(value);
-  const bytes = new Uint8Array(binary.length);
-
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-
-  return bytes;
 }
 
 export async function runCryptoSmokeTest(): Promise<boolean> {

@@ -1,6 +1,5 @@
 import { createEffect, createSignal, onCleanup } from "solid-js";
 
-const LOCK_SESSION_KEY = "clinical-workspace-unlocked";
 const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 
 export type AppLockState = {
@@ -10,17 +9,22 @@ export type AppLockState = {
   markActivity: () => void;
 };
 
-export function createAppLock(idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS): AppLockState {
-  const [locked, setLocked] = createSignal(sessionStorage.getItem(LOCK_SESSION_KEY) !== "1");
+export type AppLockOptions = {
+  idleTimeoutMs?: number;
+  onLock?: () => void;
+};
+
+export function createAppLock(options: AppLockOptions = {}): AppLockState {
+  const idleTimeoutMs = options.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
+  const [locked, setLocked] = createSignal(true);
   const [lastActivityAt, setLastActivityAt] = createSignal(Date.now());
 
   const lock = () => {
-    sessionStorage.removeItem(LOCK_SESSION_KEY);
+    options.onLock?.();
     setLocked(true);
   };
 
   const unlock = () => {
-    sessionStorage.setItem(LOCK_SESSION_KEY, "1");
     setLastActivityAt(Date.now());
     setLocked(false);
   };
