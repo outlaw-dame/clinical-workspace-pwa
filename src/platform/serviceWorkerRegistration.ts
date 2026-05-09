@@ -8,7 +8,9 @@ export async function registerAppServiceWorker(): Promise<void> {
   try {
     const updateSW = registerSW({
       immediate: true,
-      onRegisteredSW(_swUrl, registration) {
+      onRegisteredSW(swUrl, registration) {
+        void swUrl;
+
         if (!registration) return;
 
         window.setInterval(() => {
