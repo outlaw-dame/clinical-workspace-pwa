@@ -265,6 +265,8 @@ function NoteCard(props: {
   matchKind?: string;
   onDelete: (noteId: string) => Promise<void>;
 }) {
+  const bodyPreview = createMemo(() => props.preview ?? (props.note.body || "No body text."));
+
   return (
     <article class="note-card">
       <div class="note-card-header">
@@ -284,7 +286,7 @@ function NoteCard(props: {
       <Show when={props.matchKind}>
         {(kind) => <span class="match-pill">{kind()}</span>}
       </Show>
-      <p>{props.preview ?? props.note.body || "No body text."}</p>
+      <p>{bodyPreview()}</p>
     </article>
   );
 }
