@@ -31,13 +31,13 @@ export type LocalSearchRepository = {
   findSemanticCandidates: (request: SemanticSearchRequest) => Promise<RankedSearchCandidate[]>;
 };
 
-type SearchDbQueryResult<T> = {
+export type SearchDbQueryResult<T> = {
   rows: T[];
 };
 
-type SearchDb = {
+export type SearchDb = {
   exec: (sql: string) => Promise<unknown>;
-  query: <T>(sql: string, params?: readonly unknown[]) => Promise<SearchDbQueryResult<T>>;
+  query: <T>(sql: string, params?: unknown[]) => Promise<SearchDbQueryResult<T>>;
 };
 
 type SemanticSearchRow = {
