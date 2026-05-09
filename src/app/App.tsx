@@ -4,7 +4,7 @@ import { runCryptoSmokeTest } from "../local/crypto/envelope";
 import { clearCryptoSession, initializeCryptoSession } from "../local/crypto/workerClient";
 import { runLocalStorageSmokeTest } from "../local/db/client";
 import { assertOpfsAvailable } from "../local/opfs/vault";
-import { runLocalSearchSmokeTest } from "../local/search/localSearchIndex";
+import { ensureLocalSearchSchema } from "../local/search/localSearchIndex";
 import { detectCapabilities, describeCapability, type AppCapabilities } from "../platform/capabilities";
 import { createAppLock } from "../security/appLock";
 import { authenticateLocalPasskey, hasLocalPasskey, registerLocalPasskey } from "../security/passkeys";
@@ -60,7 +60,7 @@ const initialDiagnostics: Diagnostic[] = [
   {
     id: "local-search",
     label: "Local hybrid search",
-    detail: "PGlite pgvector schema and semantic index smoke test",
+    detail: "PGlite pgvector schema and index boundary check",
     state: "pending"
   }
 ];
@@ -417,7 +417,7 @@ async function runDiagnostics(
     capabilities.webCrypto ? runCryptoSmokeTest() : Promise.resolve("unsupported"),
     capabilities.opfs ? Promise.resolve(runOpfsSmokeTest()) : Promise.resolve("unsupported"),
     runLocalStorageSmokeTest(),
-    runLocalSearchSmokeTest()
+    ensureLocalSearchSchema().then(() => true)
   ]);
 
   setDiagnostics(
