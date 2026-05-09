@@ -6,7 +6,7 @@ import {
   softDeleteSecureNote,
   type SecureNote
 } from "../local/notes/secureNotes";
-import { searchSecureNotes } from "../local/search/localSearchIndex";
+import { scheduleSecureNoteSearchIndexRepair, searchSecureNotes } from "../local/search/localSearchIndex";
 import type { LocalSearchMode, LocalSearchResult } from "../local/search/searchTypes";
 
 const noteDateFormatter = new Intl.DateTimeFormat(undefined, {
@@ -47,6 +47,7 @@ export function NotesWorkspace() {
     try {
       const nextNotes = await listSecureNotes();
       setNotes(nextNotes);
+      scheduleSecureNoteSearchIndexRepair(nextNotes);
       if (searchActive()) await runSearchForNotes(nextNotes);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to load secure notes");
