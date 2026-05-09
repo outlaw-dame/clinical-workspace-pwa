@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { createLocalEmbedding, toPgVector } from "./embeddingModelRegistry";
-import { LOCAL_EMBEDDING_DIMENSIONS } from "./searchConfig";
+import {
+  createDocumentEmbedding,
+  createLocalEmbedding,
+  createQueryEmbeddingWithProvider,
+  getActiveLocalEmbeddingProvider,
+  toPgVector
+} from "./embeddingModelRegistry";
+import { LOCAL_EMBEDDING_DIMENSIONS, LOCAL_EMBEDDING_MODEL } from "./searchConfig";
 
 describe("createLocalEmbedding", () => {
   it("creates stable normalized vectors with configured dimensions", () => {
@@ -16,6 +22,29 @@ describe("createLocalEmbedding", () => {
 
   it("returns an all-zero vector for empty searchable text", () => {
     expect(createLocalEmbedding(" ")).toEqual(new Array<number>(LOCAL_EMBEDDING_DIMENSIONS).fill(0));
+  });
+});
+
+describe("embedding provider facade", () => {
+  it("exposes the active local embedding provider metadata", () => {
+    const provider = getActiveLocalEmbeddingProvider();
+
+    expect(provider.id).toBe(LOCAL_EMBEDDING_MODEL);
+    expect(provider.dimensions).toBe(LOCAL_EMBEDDING_DIMENSIONS);
+    expect(provider.privacyBoundary).toBe("local-only");
+  });
+
+  it("creates document embeddings through the active provider", async () => {
+    const embedding = await createDocumentEmbedding("sleep medication stress");
+
+    expect(embedding).toHaveLength(LOCAL_EMBEDDING_DIMENSIONS);
+  });
+
+  it("creates normalized query embeddings through the active provider", async () => {
+    const queryEmbedding = await createQueryEmbeddingWithProvider("Sleep\n\tStress");
+    const documentEmbedding = await createDocumentEmbedding("sleep stress");
+
+    expect(queryEmbedding).toEqual(documentEmbedding);
   });
 });
 
