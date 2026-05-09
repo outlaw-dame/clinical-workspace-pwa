@@ -12,7 +12,10 @@ export type SymbolName =
   | "check"
   | "warning"
   | "database"
-  | "cloudOff";
+  | "cloudOff"
+  | "key"
+  | "plus"
+  | "trash";
 
 const paths: Record<SymbolName, JSX.Element> = {
   today: (
@@ -104,6 +107,30 @@ const paths: Record<SymbolName, JSX.Element> = {
     <>
       <path d="m4 4 16 16" />
       <path d="M16.5 16H8.75A4.75 4.75 0 0 1 8 6.56 5.8 5.8 0 0 1 17.8 9.4 3.6 3.6 0 0 1 20 15.4" />
+    </>
+  ),
+  key: (
+    <>
+      <circle cx="8" cy="12" r="3.5" />
+      <path d="M11.5 12H21" />
+      <path d="M17 12v3" />
+      <path d="M14 12v2" />
+    </>
+  ),
+  plus: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 8v8" />
+      <path d="M8 12h8" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M4.5 7h15" />
+      <path d="M9.5 7V4.5h5V7" />
+      <path d="M7 7.5 8 20h8l1-12.5" />
+      <path d="M10.5 11v5" />
+      <path d="M13.5 11v5" />
     </>
   )
 };
