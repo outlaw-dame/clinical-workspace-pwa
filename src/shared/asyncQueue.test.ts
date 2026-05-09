@@ -23,9 +23,9 @@ describe("createSerializedAsyncQueue", () => {
       return "first";
     });
 
-    const secondRun = queue.enqueue(async () => {
+    const secondRun = queue.enqueue(() => {
       events.push("second:start");
-      return "second";
+      return Promise.resolve("second");
     });
 
     await Promise.resolve();
@@ -42,14 +42,14 @@ describe("createSerializedAsyncQueue", () => {
     const queue = createSerializedAsyncQueue();
     const events: string[] = [];
 
-    const rejected = queue.enqueue(async () => {
+    const rejected = queue.enqueue(() => {
       events.push("rejecting");
-      throw new Error("expected failure");
+      return Promise.reject(new Error("expected failure"));
     });
 
-    const resolved = queue.enqueue(async () => {
+    const resolved = queue.enqueue(() => {
       events.push("recovered");
-      return "ok";
+      return Promise.resolve("ok");
     });
 
     await expect(rejected).rejects.toThrow("expected failure");
