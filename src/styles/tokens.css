@@ -1,0 +1,57 @@
+:root {
+  color-scheme: light dark;
+
+  --font-system: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  --color-canvas: #f7f7f8;
+  --color-surface: rgba(255, 255, 255, 0.78);
+  --color-surface-strong: #ffffff;
+  --color-surface-muted: rgba(255, 255, 255, 0.54);
+  --color-text: #111114;
+  --color-muted: #6b6b76;
+  --color-subtle: #8d8d96;
+  --color-border: rgba(60, 60, 67, 0.18);
+  --color-border-strong: rgba(60, 60, 67, 0.28);
+  --color-accent: #6d5dfc;
+  --color-success: #1f9f63;
+  --color-warning: #c27316;
+  --color-danger: #c83a3a;
+  --shadow-soft: 0 24px 70px rgba(20, 20, 30, 0.12);
+  --shadow-card: 0 14px 40px rgba(20, 20, 30, 0.08);
+
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --radius-2xl: 30px;
+  --radius-full: 999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  --sidebar-width: 272px;
+  --bottom-tabs-height: 78px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-canvas: #07070a;
+    --color-surface: rgba(28, 28, 32, 0.82);
+    --color-surface-strong: #1c1c20;
+    --color-surface-muted: rgba(38, 38, 44, 0.58);
+    --color-text: #f5f5f7;
+    --color-muted: #aaaab4;
+    --color-subtle: #858590;
+    --color-border: rgba(235, 235, 245, 0.16);
+    --color-border-strong: rgba(235, 235, 245, 0.24);
+    --shadow-soft: 0 24px 70px rgba(0, 0, 0, 0.42);
+    --shadow-card: 0 14px 40px rgba(0, 0, 0, 0.26);
+  }
+}
