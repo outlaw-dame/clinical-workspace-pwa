@@ -1,4 +1,5 @@
 import { PGlite } from "@electric-sql/pglite";
+import { vector } from "@electric-sql/pglite/vector";
 
 let dbPromise: Promise<PGlite> | undefined;
 
@@ -40,6 +41,9 @@ CREATE TABLE IF NOT EXISTS audit_events (
   event_hash TEXT NOT NULL
 );
 
+CREATE INDEX IF NOT EXISTS idx_audit_events_created_at
+  ON audit_events (created_at DESC, id DESC);
+
 CREATE TABLE IF NOT EXISTS sync_outbox (
   id TEXT PRIMARY KEY,
   operation_type TEXT NOT NULL,
@@ -60,7 +64,10 @@ export async function getLocalDb(): Promise<PGlite> {
 }
 
 async function createLocalDb(): Promise<PGlite> {
-  const db = new PGlite("idb://clinical-workspace");
+  const db = await PGlite.create({
+    dataDir: "idb://clinical-workspace",
+    extensions: { vector }
+  });
   await db.exec(schema);
   return db;
 }

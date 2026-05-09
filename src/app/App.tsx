@@ -3,16 +3,12 @@ import { AppSymbol, type SymbolName } from "../design/icons";
 import { runCryptoSmokeTest } from "../local/crypto/envelope";
 import { clearCryptoSession, initializeCryptoSession } from "../local/crypto/workerClient";
 import { runLocalStorageSmokeTest } from "../local/db/client";
-import {
-  createSecureNote,
-  listSecureNotes,
-  softDeleteSecureNote,
-  type SecureNote
-} from "../local/notes/secureNotes";
 import { assertOpfsAvailable } from "../local/opfs/vault";
+import { ensureLocalSearchSchema } from "../local/search/localSearchIndex";
 import { detectCapabilities, describeCapability, type AppCapabilities } from "../platform/capabilities";
 import { createAppLock } from "../security/appLock";
 import { authenticateLocalPasskey, hasLocalPasskey, registerLocalPasskey } from "../security/passkeys";
+import { NotesWorkspace } from "./NotesWorkspace";
 
 type WorkspaceTab = "today" | "chat" | "notes" | "calendar" | "documents";
 type UnlockMode = "passkey" | "foundation";
@@ -33,10 +29,6 @@ type Diagnostic = {
 };
 
 const defaultNavItem: NavItem = { id: "today", label: "Today", icon: "today" };
-const noteDateFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: "medium",
-  timeStyle: "short"
-});
 
 const navItems: NavItem[] = [
   defaultNavItem,
@@ -63,6 +55,12 @@ const initialDiagnostics: Diagnostic[] = [
     id: "pglite",
     label: "Local database",
     detail: "PGlite IndexedDB-backed record smoke test",
+    state: "pending"
+  },
+  {
+    id: "local-search",
+    label: "Local hybrid search",
+    detail: "PGlite pgvector schema and index boundary check",
     state: "pending"
   }
 ];
@@ -296,7 +294,7 @@ function TabContent(props: {
         />
       </Match>
       <Match when={props.activeTab === "notes"}>
-        <NotesView />
+        <NotesWorkspace />
       </Match>
       <Match when={props.activeTab === "calendar"}>
         <PlaceholderView
@@ -353,146 +351,6 @@ function TodayView(props: { capabilities: AppCapabilities; diagnostics: Diagnost
           <StatusPill label="File picker" value={describeCapability(props.capabilities.filePicker)} />
           <StatusPill label="Reduced motion" value={props.capabilities.reducedMotion ? "On" : "Off"} />
         </div>
-      </section>
-    </div>
-  );
-}
-
-function NotesView() {
-  const [notes, setNotes] = createSignal<SecureNote[]>([]);
-  const [title, setTitle] = createSignal("");
-  const [body, setBody] = createSignal("");
-  const [loading, setLoading] = createSignal(true);
-  const [saving, setSaving] = createSignal(false);
-  const [errorMessage, setErrorMessage] = createSignal<string | undefined>();
-
-  const canSave = createMemo(() => !saving() && (title().trim().length > 0 || body().trim().length > 0));
-
-  onMount(() => {
-    void refreshNotes();
-  });
-
-  const refreshNotes = async (): Promise<void> => {
-    setLoading(true);
-    setErrorMessage(undefined);
-
-    try {
-      setNotes(await listSecureNotes());
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Unable to load secure notes");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const saveNote = async (): Promise<void> => {
-    if (!canSave()) return;
-
-    setSaving(true);
-    setErrorMessage(undefined);
-
-    try {
-      const note = await createSecureNote({ title: title(), body: body() });
-      setNotes((current) => [note, ...current]);
-      setTitle("");
-      setBody("");
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Unable to save secure note");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const deleteNote = async (noteId: string): Promise<void> => {
-    setErrorMessage(undefined);
-
-    try {
-      await softDeleteSecureNote(noteId);
-      setNotes((current) => current.filter((note) => note.id !== noteId));
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Unable to delete secure note");
-    }
-  };
-
-  return (
-    <div class="notes-grid">
-      <section class="note-composer grouped-card" aria-labelledby="new-note-title">
-        <header class="card-header">
-          <p class="eyebrow">Encrypted notebook</p>
-          <h2 id="new-note-title">Create a secure note</h2>
-          <p>Titles and bodies are encrypted together before they are written to the local database.</p>
-        </header>
-
-        <label class="field-label" for="note-title">Title</label>
-        <input
-          id="note-title"
-          class="text-field"
-          value={title()}
-          maxLength={160}
-          placeholder="Session summary, treatment plan, follow-up..."
-          onInput={(event) => setTitle(event.currentTarget.value)}
-        />
-
-        <label class="field-label" for="note-body">Body</label>
-        <textarea
-          id="note-body"
-          class="text-area"
-          value={body()}
-          maxLength={20_000}
-          placeholder="Write the note locally. Rich note bodies and collaboration can come after the encrypted foundation is stable."
-          onInput={(event) => setBody(event.currentTarget.value)}
-        />
-
-        <button class="primary-button compact" type="button" disabled={!canSave()} onClick={() => void saveNote()}>
-          <AppSymbol name="plus" />
-          {saving() ? "Saving..." : "Save encrypted note"}
-        </button>
-      </section>
-
-      <section class="grouped-card" aria-labelledby="notes-list-title">
-        <header class="card-header split-header">
-          <div>
-            <p class="eyebrow">Local records</p>
-            <h2 id="notes-list-title">Secure notes</h2>
-            <p>{loading() ? "Decrypting local notes..." : `${notes().length} encrypted note${notes().length === 1 ? "" : "s"}`}</p>
-          </div>
-          <button class="secondary-icon-button" type="button" onClick={() => void refreshNotes()} aria-label="Refresh notes">
-            <AppSymbol name="database" />
-          </button>
-        </header>
-
-        <Show when={errorMessage()}>
-          {(message) => <p class="error-message" role="alert">{message()}</p>}
-        </Show>
-
-        <Show
-          when={notes().length > 0}
-          fallback={<p class="empty-state">No secure notes yet. Create one to verify the encrypted local notes flow.</p>}
-        >
-          <div class="note-list">
-            <For each={notes()}>
-              {(note) => (
-                <article class="note-card">
-                  <div class="note-card-header">
-                    <div>
-                      <h3>{note.title}</h3>
-                      <time dateTime={note.updatedAt}>{formatNoteDate(note.updatedAt)}</time>
-                    </div>
-                    <button
-                      class="secondary-icon-button danger"
-                      type="button"
-                      onClick={() => void deleteNote(note.id)}
-                      aria-label={`Delete ${note.title}`}
-                    >
-                      <AppSymbol name="trash" />
-                    </button>
-                  </div>
-                  <p>{note.body || "No body text."}</p>
-                </article>
-              )}
-            </For>
-          </div>
-        </Show>
       </section>
     </div>
   );
@@ -558,7 +416,8 @@ async function runDiagnostics(
   const results = await Promise.allSettled([
     capabilities.webCrypto ? runCryptoSmokeTest() : Promise.resolve("unsupported"),
     capabilities.opfs ? Promise.resolve(runOpfsSmokeTest()) : Promise.resolve("unsupported"),
-    runLocalStorageSmokeTest()
+    runLocalStorageSmokeTest(),
+    ensureLocalSearchSchema().then(() => true)
   ]);
 
   setDiagnostics(
@@ -576,8 +435,4 @@ async function runDiagnostics(
       return { ...diagnostic, state: result.value === true ? "passed" : "failed" };
     })
   );
-}
-
-function formatNoteDate(value: string): string {
-  return noteDateFormatter.format(new Date(value));
 }

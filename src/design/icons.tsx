@@ -15,7 +15,8 @@ export type SymbolName =
   | "cloudOff"
   | "key"
   | "plus"
-  | "trash";
+  | "trash"
+  | "search";
 
 const paths: Record<SymbolName, JSX.Element> = {
   today: (
@@ -131,6 +132,12 @@ const paths: Record<SymbolName, JSX.Element> = {
       <path d="M7 7.5 8 20h8l1-12.5" />
       <path d="M10.5 11v5" />
       <path d="M13.5 11v5" />
+    </>
+  ),
+  search: (
+    <>
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="m15.5 15.5 4 4" />
     </>
   )
 };
