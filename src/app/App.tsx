@@ -296,13 +296,18 @@ function StatusPill(props: { label: string; value: string }) {
   );
 }
 
+function runOpfsSmokeTest(): boolean {
+  assertOpfsAvailable();
+  return true;
+}
+
 async function runDiagnostics(
   capabilities: AppCapabilities,
   setDiagnostics: (value: Diagnostic[]) => void
 ): Promise<void> {
   const results = await Promise.allSettled([
     capabilities.webCrypto ? runCryptoSmokeTest() : Promise.resolve("unsupported"),
-    capabilities.opfs ? assertOpfsAvailable().then(() => true) : Promise.resolve("unsupported"),
+    capabilities.opfs ? Promise.resolve(runOpfsSmokeTest()) : Promise.resolve("unsupported"),
     runLocalStorageSmokeTest()
   ]);
 
