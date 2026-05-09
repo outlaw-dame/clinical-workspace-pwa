@@ -69,7 +69,12 @@ const initialDiagnostics: Diagnostic[] = [
 
 export function App() {
   const capabilities = detectCapabilities();
-  const appLock = createAppLock({ onLock: () => void clearCryptoSession() });
+  const handleLockCleanup = () => {
+    void clearCryptoSession().catch((error: unknown) => {
+      console.warn("Unable to clear crypto session", error);
+    });
+  };
+  const appLock = createAppLock({ onLock: handleLockCleanup });
   const [activeTab, setActiveTab] = createSignal<WorkspaceTab>("today");
   const [diagnostics, setDiagnostics] = createSignal<Diagnostic[]>(initialDiagnostics);
 
@@ -400,7 +405,7 @@ function NotesView() {
           id="note-title"
           class="text-field"
           value={title()}
-          maxlength="160"
+          maxLength={160}
           placeholder="Session summary, treatment plan, follow-up..."
           onInput={(event) => setTitle(event.currentTarget.value)}
         />
@@ -410,7 +415,7 @@ function NotesView() {
           id="note-body"
           class="text-area"
           value={body()}
-          maxlength="20000"
+          maxLength={20_000}
           placeholder="Write the note locally. Rich note bodies and collaboration can come after the encrypted foundation is stable."
           onInput={(event) => setBody(event.currentTarget.value)}
         />
