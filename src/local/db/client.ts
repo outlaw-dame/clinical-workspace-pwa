@@ -1,4 +1,5 @@
 import { PGlite } from "@electric-sql/pglite";
+import { vector } from "@electric-sql/pglite/vector";
 
 let dbPromise: Promise<PGlite> | undefined;
 
@@ -60,7 +61,9 @@ export async function getLocalDb(): Promise<PGlite> {
 }
 
 async function createLocalDb(): Promise<PGlite> {
-  const db = new PGlite("idb://clinical-workspace");
+  const db = await PGlite.create("idb://clinical-workspace", {
+    extensions: { vector }
+  });
   await db.exec(schema);
   return db;
 }
