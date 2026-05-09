@@ -33,6 +33,10 @@ type Diagnostic = {
 };
 
 const defaultNavItem: NavItem = { id: "today", label: "Today", icon: "today" };
+const noteDateFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: "medium",
+  timeStyle: "short"
+});
 
 const navItems: NavItem[] = [
   defaultNavItem,
@@ -65,7 +69,7 @@ const initialDiagnostics: Diagnostic[] = [
 
 export function App() {
   const capabilities = detectCapabilities();
-  const appLock = createAppLock();
+  const appLock = createAppLock({ onLock: () => void clearCryptoSession() });
   const [activeTab, setActiveTab] = createSignal<WorkspaceTab>("today");
   const [diagnostics, setDiagnostics] = createSignal<Diagnostic[]>(initialDiagnostics);
 
@@ -84,14 +88,6 @@ export function App() {
 
     await initializeCryptoSession();
     appLock.unlock();
-  };
-
-  const handleLock = async (): Promise<void> => {
-    try {
-      await clearCryptoSession();
-    } finally {
-      appLock.lock();
-    }
   };
 
   onMount(() => {
@@ -128,7 +124,7 @@ export function App() {
             <button
               class="icon-button"
               type="button"
-              onClick={() => void handleLock()}
+              onClick={appLock.lock}
               aria-label="Lock workspace"
             >
               <AppSymbol name="lock" />
@@ -555,8 +551,5 @@ async function runDiagnostics(
 }
 
 function formatNoteDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(new Date(value));
+  return noteDateFormatter.format(new Date(value));
 }
