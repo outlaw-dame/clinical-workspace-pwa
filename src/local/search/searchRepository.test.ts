@@ -13,10 +13,9 @@ function createMockSearchDb(rows: unknown[] = []) {
     capturedQueries.push({ sql, params });
     return { rows: rows as T[] };
   };
-  const queryMock = vi.fn(query);
 
   return {
-    db: { exec, query: queryMock } satisfies SearchDb,
+    db: { exec, query } satisfies SearchDb,
     capturedQueries
   };
 }
