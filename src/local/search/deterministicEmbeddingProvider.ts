@@ -23,17 +23,16 @@ export const deterministicLocalEmbeddingProvider: LocalEmbeddingProvider = {
 };
 
 export function createDeterministicTokenHashEmbedding(value: string, signal?: AbortSignal): number[] {
-  const text = value.slice(0, MAX_EMBEDDING_TEXT_LENGTH).toLocaleLowerCase();
+  const text = value.slice(0, MAX_EMBEDDING_TEXT_LENGTH).toLowerCase();
   const vector = new Array<number>(LOCAL_EMBEDDING_DIMENSIONS).fill(0);
-  const tokens = Array.from(text.matchAll(TOKEN_PATTERN), ([match]) => match);
 
-  for (const token of tokens) {
+  for (const [token] of text.matchAll(TOKEN_PATTERN)) {
     assertEmbeddingNotAborted(signal);
     const normalizedToken = token.replace(/^[-']+|[-']+$/g, "");
     if (normalizedToken.length < 2) continue;
 
     const index = stableHash(normalizedToken) % LOCAL_EMBEDDING_DIMENSIONS;
-    vector[index] = (vector[index] ?? 0) + 1 / Math.sqrt(normalizedToken.length);
+    vector[index] += 1 / Math.sqrt(normalizedToken.length);
   }
 
   return normalizeEmbeddingVector(vector);
