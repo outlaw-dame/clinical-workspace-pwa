@@ -1,3 +1,5 @@
+export type EncryptedBytes = Uint8Array<ArrayBuffer>;
+
 export type VaultWriteResult = {
   path: string;
   bytesWritten: number;
@@ -19,7 +21,7 @@ async function getVaultDirectory(): Promise<FileSystemDirectoryHandle> {
 
 export async function writeEncryptedBlob(
   name: string,
-  encryptedBytes: Uint8Array
+  encryptedBytes: EncryptedBytes
 ): Promise<VaultWriteResult> {
   const safeName = sanitizeVaultName(name);
   const directory = await getVaultDirectory();
@@ -38,12 +40,13 @@ export async function writeEncryptedBlob(
   };
 }
 
-export async function readEncryptedBlob(name: string): Promise<Uint8Array> {
+export async function readEncryptedBlob(name: string): Promise<EncryptedBytes> {
   const safeName = sanitizeVaultName(name);
   const directory = await getVaultDirectory();
   const file = await directory.getFileHandle(safeName);
   const blob = await file.getFile();
-  return new Uint8Array(await blob.arrayBuffer());
+  const buffer = await blob.arrayBuffer();
+  return new Uint8Array(buffer);
 }
 
 export async function deleteEncryptedBlob(name: string): Promise<void> {
