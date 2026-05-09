@@ -60,5 +60,7 @@ export async function runLocalStorageSmokeTest(): Promise<boolean> {
   );
 
   const result = await db.query<{ id: string }>("SELECT id FROM local_records WHERE id = $1", [id]);
+  await db.query("DELETE FROM local_records WHERE id = $1", [id]);
+
   return result.rows[0]?.id === id;
 }
