@@ -23,8 +23,10 @@ type Diagnostic = {
   state: DiagnosticState;
 };
 
+const defaultNavItem: NavItem = { id: "today", label: "Today", icon: "today" };
+
 const navItems: NavItem[] = [
-  { id: "today", label: "Today", icon: "today" },
+  defaultNavItem,
   { id: "chat", label: "Chat", icon: "chat" },
   { id: "notes", label: "Notes", icon: "notes" },
   { id: "calendar", label: "Calendar", icon: "calendar" },
@@ -58,7 +60,9 @@ export function App() {
   const [activeTab, setActiveTab] = createSignal<WorkspaceTab>("today");
   const [diagnostics, setDiagnostics] = createSignal<Diagnostic[]>(initialDiagnostics);
 
-  const activeNavItem = createMemo(() => navItems.find((item) => item.id === activeTab()) ?? navItems[0]);
+  const activeNavItem = createMemo(() =>
+    navItems.find((item) => item.id === activeTab()) ?? defaultNavItem
+  );
 
   onMount(() => {
     const activityEvents = ["pointerdown", "keydown", "focus"] as const;
@@ -255,7 +259,7 @@ function PlaceholderView(props: { icon: SymbolName; title: string; body: string 
 }
 
 function DiagnosticRow(props: { diagnostic: Diagnostic }) {
-  const icon = () => {
+  const icon = (): SymbolName => {
     switch (props.diagnostic.state) {
       case "passed":
         return "check";
