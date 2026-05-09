@@ -2,15 +2,15 @@
 
 A minimalist, Apple-like, local-first Progressive Web App foundation for a secure clinical workspace. The product direction is a private workspace that combines secure chat, notes, calendar, tasks, and encrypted document storage for mental health professional workflows.
 
-This repository started as an architecture specification and now includes the first application scaffold.
+This repository started as an architecture specification and now includes an application scaffold with local security, encrypted notes, and local hybrid search foundations.
 
 ## Foundation goals
 
 - **Native-feeling PWA:** installable shell, safe-area aware layout, iPhone bottom tabs, larger-screen sidebar, reduced-motion support.
 - **Apple-like default interface:** system typography, calm grouped cards, large titles, subtle translucency, minimal dependency footprint.
-- **Local-first data boundary:** PGlite local database foundation with audit and sync-outbox tables.
+- **Local-first data boundary:** PGlite local database foundation with audit, sync-outbox, encrypted notes, and local search tables.
 - **Encrypted document boundary:** OPFS vault helpers that only accept encrypted bytes.
-- **Security-first posture:** local app lock, Web Crypto smoke test, no PHI-bearing service-worker API caching, no analytics/session replay.
+- **Security-first posture:** local app lock, passkey unlock ceremony, Web Crypto smoke test, no PHI-bearing service-worker API caching, no analytics/session replay.
 - **Progressive platform behavior:** feature detection for WebAuthn, Web Crypto, OPFS, Web Push, Share API, file picker, install state, pointer type, and reduced motion.
 
 ## Current stack
@@ -18,12 +18,13 @@ This repository started as an architecture specification and now includes the fi
 - Vite
 - SolidJS
 - TypeScript
-- PGlite
+- PGlite with pgvector extension wiring
 - Vite PWA + Workbox
 - Web Crypto API
 - Origin Private File System
 - Custom semantic SVG icon wrapper
 - Custom CSS design tokens and primitives
+- Vitest for focused unit tests
 
 ## Local development
 
@@ -37,10 +38,13 @@ npm run dev
 ```bash
 npm run typecheck
 npm run lint
+npm test
 npm run build
 ```
 
-CI runs typecheck, lint, and production build on pull requests and pushes to `master`.
+CI runs install, typecheck, lint, tests, and production build on pull requests and pushes to `master`.
+
+New behavior should include sensible tests where practical. Pure ranking, sanitation, queueing, crypto adapters, retry logic, and policy helpers should be covered with focused unit tests. Browser/PWA surfaces can be covered incrementally as the test harness matures.
 
 ## Important security rules
 
@@ -52,26 +56,38 @@ The service worker is intentionally conservative:
 - decrypted user data must never be exposed by URL;
 - PHI-bearing API responses must not be cached by the service worker.
 
-The current app lock is a local foundation lock, not final authentication. Passkeys/WebAuthn should become the real auth unlock path in the next security phase.
+Local search follows the same privacy boundary:
 
-## First implemented surfaces
+- decrypted note text is not persisted in search tables;
+- local search chunks store derived metadata, source timestamps, schema/model metadata, and vectors;
+- query text is not written to audit metadata;
+- previews are generated from decrypted in-memory notes only after unlock.
+
+The current passkey flow proves a local browser authenticator ceremony and gates the local workspace. Production sync/session trust still requires server-issued WebAuthn challenges and server-side signature verification.
+
+## Implemented surfaces
 
 - Secure lock screen
+- Passkey setup/unlock foundation
 - Adaptive app shell
 - Today view
-- Placeholder surfaces for Chat, Notes, Calendar, and Documents
-- Local-first diagnostics for Web Crypto, OPFS, and PGlite
+- Encrypted secure notes
+- Local hybrid search over secure notes
+- Privacy-safe audit-event writes with serialized hash-chain updates
+- Background/batched search-index repair
+- Placeholder surfaces for Chat, Calendar, and Documents
+- Local-first diagnostics for Web Crypto, OPFS, PGlite, and local search schema initialization
 - Platform capability dashboard
 
 ## Next implementation phase
 
-1. Replace foundation unlock with WebAuthn/passkey registration and authentication.
-2. Move encryption work into a dedicated worker boundary.
-3. Add encrypted local note records with explicit migrations.
-4. Add chat message model, local optimistic send, and sync outbox operations.
-5. Add document import flow that encrypts before writing to OPFS.
-6. Add audit-event creation around lock/unlock, document access, and local writes.
+1. Harden search architecture with injectable repositories and integration-style tests around local schema/indexing.
+2. Replace the deterministic embedding scaffold with a real local embedding provider abstraction behind worker, cancellation, model-version, and reindex boundaries.
+3. Add chat message model, local optimistic send, and sync outbox operations with exponential backoff and idempotency.
+4. Add document import flow that encrypts before writing to OPFS.
+5. Add task and calendar records that fit the Today/Chat/Notes/Calendar surfaces rather than becoming a separate project-management module.
+6. Expand audit coverage around lock/unlock, document access, local writes, and sync attempts without storing PHI in logs.
 
 ## Compliance note
 
-This scaffold is not a complete HIPAA-compliant product. It establishes the technical direction needed for a HIPAA-oriented product: local-first storage, encryption boundaries, conservative caching, audit-table foundation, and no PHI analytics/logging assumptions. Actual HIPAA readiness also requires operational controls, vendor BAAs, risk analysis, incident response, access reviews, retention policies, and evidence collection.
+This scaffold is not a complete HIPAA-compliant product. It establishes the technical direction needed for a HIPAA-oriented product: local-first storage, encryption boundaries, conservative caching, audit-table foundation, privacy-safe local search, and no PHI analytics/logging assumptions. Actual HIPAA readiness also requires operational controls, vendor BAAs, risk analysis, incident response, access reviews, retention policies, and evidence collection.
