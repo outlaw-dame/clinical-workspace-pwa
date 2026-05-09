@@ -1,5 +1,6 @@
 import { encryptInCryptoWorker } from "../crypto/workerClient";
 import { getLocalDb } from "../db/client";
+import { createSerializedAsyncQueue } from "../../shared/asyncQueue";
 
 type AuditMetadata = Record<string, string | number | boolean | null>;
 
@@ -8,6 +9,7 @@ type AuditTailRow = {
 };
 
 const HASH_ALGORITHM = "SHA-256";
+const auditWriteQueue = createSerializedAsyncQueue();
 
 export async function recordAuditEvent(
   action: string,
@@ -15,11 +17,38 @@ export async function recordAuditEvent(
   targetId?: string,
   metadata?: AuditMetadata
 ): Promise<void> {
+  await auditWriteQueue.enqueue(() => recordAuditEventInOrder(action, targetType, targetId, metadata));
+}
+
+export async function recordAuditEventSafely(
+  action: string,
+  targetType: string,
+  targetId?: string,
+  metadata?: AuditMetadata
+): Promise<void> {
+  try {
+    await recordAuditEvent(action, targetType, targetId, metadata);
+  } catch (error) {
+    console.warn("Unable to record audit event", error);
+  }
+}
+
+async function recordAuditEventInOrder(
+  action: string,
+  targetType: string,
+  targetId?: string,
+  metadata?: AuditMetadata
+): Promise<void> {
   const db = await getLocalDb();
+  await db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_audit_events_created_at
+      ON audit_events (created_at DESC, id DESC);
+  `);
+
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
   const previousHashResult = await db.query<AuditTailRow>(
-    "SELECT event_hash FROM audit_events ORDER BY created_at DESC LIMIT 1"
+    "SELECT event_hash FROM audit_events ORDER BY created_at DESC, id DESC LIMIT 1"
   );
   const previousHash = previousHashResult.rows[0]?.event_hash;
   const metadataCiphertext = metadata ? JSON.stringify(await encryptInCryptoWorker(JSON.stringify(metadata))) : null;
@@ -40,19 +69,6 @@ export async function recordAuditEvent(
      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [id, action, targetType, targetId ?? null, metadataCiphertext, createdAt, previousHash ?? null, eventHash]
   );
-}
-
-export async function recordAuditEventSafely(
-  action: string,
-  targetType: string,
-  targetId?: string,
-  metadata?: AuditMetadata
-): Promise<void> {
-  try {
-    await recordAuditEvent(action, targetType, targetId, metadata);
-  } catch (error) {
-    console.warn("Unable to record audit event", error);
-  }
 }
 
 async function hashAuditEvent(value: {
