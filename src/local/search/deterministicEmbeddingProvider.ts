@@ -32,7 +32,7 @@ export function createDeterministicTokenHashEmbedding(value: string, signal?: Ab
     if (normalizedToken.length < 2) continue;
 
     const index = stableHash(normalizedToken) % LOCAL_EMBEDDING_DIMENSIONS;
-    vector[index] += 1 / Math.sqrt(normalizedToken.length);
+    vector[index]! += 1 / Math.sqrt(normalizedToken.length);
   }
 
   return normalizeEmbeddingVector(vector);
