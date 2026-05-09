@@ -6,12 +6,15 @@ import {
   type LocalEmbeddingProvider,
   type LocalEmbeddingPurpose
 } from "./embeddingProvider";
+import { assertValidLocalEmbeddingManifest } from "./embeddingManifestValidation";
+import { getActiveLocalEmbeddingManifest } from "./localEmbeddingManifests";
 import { LOCAL_EMBEDDING_DIMENSIONS } from "./searchConfig";
 import { sanitizeSearchQuery } from "./searchSanitization";
 
 export const activeLocalEmbeddingProvider = deterministicLocalEmbeddingProvider;
 
 export function getActiveLocalEmbeddingProvider(): LocalEmbeddingProvider {
+  assertValidLocalEmbeddingManifest(getActiveLocalEmbeddingManifest());
   return activeLocalEmbeddingProvider;
 }
 
