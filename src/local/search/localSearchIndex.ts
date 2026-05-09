@@ -38,17 +38,19 @@ type LocalSearchRuntimeOptions = LocalSearchOptions & {
 
 const REPAIR_BATCH_SIZE = 12;
 const REPAIR_DEBOUNCE_MS = 500;
-let defaultSearchSchemaPromise: Promise<void> | undefined;
+const schemaInitializationCache = new WeakMap<LocalSearchRepository, Promise<void>>();
 
-export async function ensureLocalSearchSchema(repository?: LocalSearchRepository): Promise<void> {
-  const defaultRepository = getDefaultLocalSearchRepository();
+export async function ensureLocalSearchSchema(
+  repository = getDefaultLocalSearchRepository()
+): Promise<void> {
+  let promise = schemaInitializationCache.get(repository);
 
-  if (repository !== undefined && repository !== defaultRepository) {
-    return repository.ensureSchema();
+  if (promise === undefined) {
+    promise = repository.ensureSchema();
+    schemaInitializationCache.set(repository, promise);
   }
 
-  defaultSearchSchemaPromise ??= defaultRepository.ensureSchema();
-  return defaultSearchSchemaPromise;
+  return promise;
 }
 
 export async function indexSecureNoteForSearch(
