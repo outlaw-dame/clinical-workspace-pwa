@@ -3,6 +3,7 @@ import { LOCAL_EMBEDDING_DIMENSIONS, LOCAL_EMBEDDING_MODEL } from "./searchConfi
 
 export const EMBEDDINGGEMMA_CANDIDATE_MODEL_ID = "onnx-community/embeddinggemma-300m-ONNX";
 export const EMBEDDINGGEMMA_BASE_MODEL_ID = "google/embeddinggemma-300m";
+export const EMBEDDINGGEMMA_PINNED_REVISION = "75a84c732f1884df76bec365346230e32f582c82";
 export const EMBEDDINGGEMMA_BASE_DIMENSIONS = 768;
 export const EMBEDDINGGEMMA_SELECTED_DIMENSIONS = 256;
 export const EMBEDDINGGEMMA_SUPPORTED_DIMENSIONS = [768, 512, 256, 128] as const;
@@ -25,7 +26,7 @@ export const embeddingGemma300mCandidateManifest: LocalEmbeddingModelManifest = 
   displayName: "EmbeddingGemma 300M ONNX q4 candidate",
   modelId: EMBEDDINGGEMMA_CANDIDATE_MODEL_ID,
   baseModelId: EMBEDDINGGEMMA_BASE_MODEL_ID,
-  revision: "main-pending-sha-lock",
+  revision: EMBEDDINGGEMMA_PINNED_REVISION,
   dimensions: EMBEDDINGGEMMA_SELECTED_DIMENSIONS,
   baseDimensions: EMBEDDINGGEMMA_BASE_DIMENSIONS,
   supportedDimensions: EMBEDDINGGEMMA_SUPPORTED_DIMENSIONS,
