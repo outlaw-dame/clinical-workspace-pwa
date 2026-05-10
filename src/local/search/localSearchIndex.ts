@@ -1,7 +1,7 @@
 import { recordAuditEventSafely } from "../audit/auditRepository";
 import {
-  createDocumentEmbedding,
-  createQueryEmbeddingWithProvider,
+  createDocumentEmbeddingResult,
+  createQueryEmbeddingResult,
   getActiveLocalEmbeddingProvider,
   toPgVector
 } from "./embeddingModelRegistry";
@@ -59,17 +59,18 @@ export async function indexSecureNoteForSearch(
 ): Promise<void> {
   await ensureLocalSearchSchema(repository);
   const now = new Date().toISOString();
-  const embeddingProvider = getActiveLocalEmbeddingProvider();
-  const embedding = toPgVector(await createDocumentEmbedding(`${note.title}\n\n${note.body}`));
+  const embeddingResult = await createDocumentEmbeddingResult(`${note.title}\n\n${note.body}`);
+  const embedding = toPgVector(embeddingResult.embedding, embeddingResult.provider.dimensions);
 
   await repository.upsertSearchChunk({
-    id: `${note.id}:0`,
+    id: `${note.id}:0:${embeddingResult.provider.id}`,
     recordId: note.id,
     recordType: "secure_note",
     chunkIndex: 0,
     sourceUpdatedAt: note.updatedAt,
     embedding,
-    embeddingModel: embeddingProvider.id,
+    embeddingDimensions: embeddingResult.provider.dimensions,
+    embeddingModel: embeddingResult.provider.id,
     schemaVersion: LOCAL_SEARCH_SCHEMA_VERSION,
     createdAt: now,
     updatedAt: now
@@ -89,7 +90,8 @@ export async function removeSecureNoteFromSearchIndex(
   repository = getDefaultLocalSearchRepository()
 ): Promise<void> {
   await ensureLocalSearchSchema(repository);
-  await repository.markRecordDeleted("secure_note", noteId, new Date().toISOString());
+  const provider = getActiveLocalEmbeddingProvider();
+  await repository.markRecordDeleted("secure_note", noteId, provider.dimensions, new Date().toISOString());
 }
 
 export async function removeSecureNoteFromSearchIndexSafely(noteId: string): Promise<void> {
@@ -112,7 +114,8 @@ export async function repairSecureNoteSearchIndex(
   repository = getDefaultLocalSearchRepository()
 ): Promise<void> {
   await ensureLocalSearchSchema(repository);
-  const indexedRows = await repository.listActiveChunkSnapshots("secure_note", 0);
+  const provider = getActiveLocalEmbeddingProvider();
+  const indexedRows = await repository.listActiveChunkSnapshots("secure_note", 0, provider.id, provider.dimensions);
   const repairPlan = planSecureNoteSearchIndexRepair(notes, indexedRows);
 
   await runInBatches(repairPlan.staleNotes, REPAIR_BATCH_SIZE, (note) => indexSecureNoteForSearch(note, repository));
@@ -192,13 +195,14 @@ async function createSemanticCandidates(
 ): Promise<RankedSearchCandidate[]> {
   try {
     await ensureLocalSearchSchema(repository);
-    const embeddingProvider = getActiveLocalEmbeddingProvider();
-    const queryEmbedding = toPgVector(await createQueryEmbeddingWithProvider(queryText));
+    const embeddingResult = await createQueryEmbeddingResult(queryText);
+    const queryEmbedding = toPgVector(embeddingResult.embedding, embeddingResult.provider.dimensions);
 
     return repository.findSemanticCandidates({
       recordType: "secure_note",
       embedding: queryEmbedding,
-      embeddingModel: embeddingProvider.id,
+      embeddingDimensions: embeddingResult.provider.dimensions,
+      embeddingModel: embeddingResult.provider.id,
       schemaVersion: LOCAL_SEARCH_SCHEMA_VERSION,
       limit
     });
