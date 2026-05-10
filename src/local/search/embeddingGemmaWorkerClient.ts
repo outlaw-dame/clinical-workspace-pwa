@@ -11,7 +11,7 @@ const REQUEST_TIMEOUT_MS = 45_000;
 
 type PendingRequest = {
   resolve: (response: LocalEmbeddingWorkerResponse) => void;
-  reject: (error: unknown) => void;
+  reject: (error: Error) => void;
   timeoutId: ReturnType<typeof setTimeout>;
 };
 
@@ -98,15 +98,23 @@ async function sendWorkerRequest(
 
   return new Promise<LocalEmbeddingWorkerResponse>((resolve, reject) => {
     const activeWorker = getEmbeddingGemmaWorker();
+    let abortHandler: (() => void) | undefined;
+
     const timeoutId = setTimeout(() => {
-      pendingRequests.delete(request.requestId);
-      reject(new LocalEmbeddingProviderError("inference_failed", "EmbeddingGemma worker request timed out"));
+      const pending = pendingRequests.get(request.requestId);
+      if (pending !== undefined) {
+        pendingRequests.delete(request.requestId);
+        pending.reject(new LocalEmbeddingProviderError("inference_failed", "EmbeddingGemma worker request timed out"));
+      }
     }, REQUEST_TIMEOUT_MS);
 
-    const abortHandler = (): void => {
-      clearTimeout(timeoutId);
-      pendingRequests.delete(request.requestId);
-      reject(new LocalEmbeddingAbortError());
+    abortHandler = (): void => {
+      const pending = pendingRequests.get(request.requestId);
+      if (pending !== undefined) {
+        pendingRequests.delete(request.requestId);
+        clearTimeout(timeoutId);
+        pending.reject(new LocalEmbeddingAbortError());
+      }
     };
 
     if (signal !== undefined) {
