@@ -40,7 +40,13 @@ describe("assertValidArtifactIntegrityPolicy", () => {
   it("requires model artifacts to declare a dtype", () => {
     const [first, ...rest] = embeddingGemma300mArtifactIntegrityPolicy.artifacts;
     if (first === undefined) throw new Error("missing fixture artifact");
-    const { dtype: _dtype, ...artifactWithoutDtype } = first;
+    const artifactWithoutDtype = {
+      path: first.path,
+      role: first.role,
+      sha256: first.sha256,
+      remoteSizeLabel: first.remoteSizeLabel,
+      required: first.required
+    };
 
     expect(() =>
       assertValidArtifactIntegrityPolicy({
