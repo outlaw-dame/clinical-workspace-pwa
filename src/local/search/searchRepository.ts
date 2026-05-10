@@ -67,6 +67,12 @@ export function getDefaultLocalSearchRepository(): LocalSearchRepository {
   return defaultLocalSearchRepository;
 }
 
+export function resolveSearchEmbeddingDimensions(dimensions: number): SupportedSearchEmbeddingDimensions {
+  if (dimensions === LOCAL_EMBEDDING_DIMENSIONS) return LOCAL_EMBEDDING_DIMENSIONS;
+  if (dimensions === EMBEDDINGGEMMA_SELECTED_DIMENSIONS) return EMBEDDINGGEMMA_SELECTED_DIMENSIONS;
+  throw new Error(`Unsupported local search embedding dimensions: ${dimensions}`);
+}
+
 export function createPgliteLocalSearchRepository(getDb: () => Promise<SearchDb> = getLocalDb): LocalSearchRepository {
   return {
     async ensureSchema() {
@@ -157,9 +163,7 @@ export function createPgliteLocalSearchRepository(getDb: () => Promise<SearchDb>
 }
 
 function getSearchTableName(dimensions: SupportedSearchEmbeddingDimensions): string {
-  if (dimensions === LOCAL_EMBEDDING_DIMENSIONS) return "local_search_chunks";
-  if (dimensions === EMBEDDINGGEMMA_SELECTED_DIMENSIONS) return "local_search_chunks_256";
-  throw new Error(`Unsupported local search embedding dimensions: ${dimensions}`);
+  return dimensions === LOCAL_EMBEDDING_DIMENSIONS ? "local_search_chunks" : "local_search_chunks_256";
 }
 
 function createSearchTableSql(tableName: string, dimensions: SupportedSearchEmbeddingDimensions): string {
