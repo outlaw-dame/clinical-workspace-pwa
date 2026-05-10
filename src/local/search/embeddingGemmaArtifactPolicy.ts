@@ -4,10 +4,9 @@ import {
 } from "./embeddingArtifactIntegrity";
 import {
   EMBEDDINGGEMMA_CANDIDATE_MODEL_ID,
+  EMBEDDINGGEMMA_PINNED_REVISION,
   embeddingGemma300mCandidateManifest
 } from "./localEmbeddingManifests";
-
-export const EMBEDDINGGEMMA_PINNED_REVISION = "75a84c732f1884df76bec365346230e32f582c82";
 
 export const embeddingGemma300mArtifactIntegrityPolicy: LocalEmbeddingArtifactIntegrityPolicy = {
   manifestId: embeddingGemma300mCandidateManifest.id,
