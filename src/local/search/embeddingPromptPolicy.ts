@@ -1,4 +1,3 @@
-import { replaceUnsafeControlCharacters } from "../../shared/textSanitation";
 import type { LocalEmbeddingModelManifest } from "./embeddingManifest";
 import { LocalEmbeddingProviderError } from "./embeddingProviderErrors";
 
@@ -35,8 +34,35 @@ function requirePromptPolicy(manifest: LocalEmbeddingModelManifest): NonNullable
 }
 
 function sanitizePromptField(value: string): string {
-  return replaceUnsafeControlCharacters(value)
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, MAX_PROMPT_FIELD_LENGTH);
+  let sanitized = "";
+  let pendingSpace = false;
+
+  for (const character of value) {
+    if (sanitized.length >= MAX_PROMPT_FIELD_LENGTH) break;
+
+    if (isPromptFieldSeparator(character)) {
+      pendingSpace = sanitized.length > 0;
+      continue;
+    }
+
+    if (pendingSpace && sanitized.length < MAX_PROMPT_FIELD_LENGTH) {
+      sanitized += " ";
+    }
+
+    pendingSpace = false;
+
+    if (sanitized.length + character.length > MAX_PROMPT_FIELD_LENGTH) break;
+    sanitized += character;
+  }
+
+  return sanitized.trimEnd();
+}
+
+function isPromptFieldSeparator(character: string): boolean {
+  return isUnsafeControlCharacter(character) || character.trim().length === 0;
+}
+
+function isUnsafeControlCharacter(character: string): boolean {
+  const code = character.charCodeAt(0);
+  return (code >= 0 && code <= 8) || code === 11 || code === 12 || (code >= 14 && code <= 31) || code === 127;
 }
