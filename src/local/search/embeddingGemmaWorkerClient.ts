@@ -98,7 +98,6 @@ async function sendWorkerRequest(
 
   return new Promise<LocalEmbeddingWorkerResponse>((resolve, reject) => {
     const activeWorker = getEmbeddingGemmaWorker();
-    let abortHandler: (() => void) | undefined;
 
     const timeoutId = setTimeout(() => {
       const pending = pendingRequests.get(request.requestId);
@@ -108,7 +107,7 @@ async function sendWorkerRequest(
       }
     }, REQUEST_TIMEOUT_MS);
 
-    abortHandler = (): void => {
+    const abortHandler = (): void => {
       const pending = pendingRequests.get(request.requestId);
       if (pending !== undefined) {
         pendingRequests.delete(request.requestId);
