@@ -40,11 +40,12 @@ describe("assertValidArtifactIntegrityPolicy", () => {
   it("requires model artifacts to declare a dtype", () => {
     const [first, ...rest] = embeddingGemma300mArtifactIntegrityPolicy.artifacts;
     if (first === undefined) throw new Error("missing fixture artifact");
+    const { dtype: _dtype, ...artifactWithoutDtype } = first;
 
     expect(() =>
       assertValidArtifactIntegrityPolicy({
         ...embeddingGemma300mArtifactIntegrityPolicy,
-        artifacts: [{ ...first, dtype: undefined }, ...rest]
+        artifacts: [artifactWithoutDtype, ...rest]
       })
     ).toThrow("model artifacts must declare a dtype");
   });
