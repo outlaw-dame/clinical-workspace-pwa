@@ -62,7 +62,10 @@ export function assertValidArtifactIntegrityPolicy(policy: LocalEmbeddingArtifac
 
   for (const role of ["model-graph", "model-data", "tokenizer-json", "tokenizer-model"] as const) {
     if (!requiredRoles.has(role)) {
-      throw new LocalEmbeddingProviderError("invalid_manifest", "Embedding artifact policy is missing a required artifact role");
+      throw new LocalEmbeddingProviderError(
+        "invalid_manifest",
+        `Embedding artifact policy is missing a required artifact role: ${role}`
+      );
     }
   }
 }
