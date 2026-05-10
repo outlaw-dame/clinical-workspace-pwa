@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createPgliteLocalSearchRepository, type SearchDb } from "./searchRepository";
+import { EMBEDDINGGEMMA_SELECTED_DIMENSIONS } from "./localEmbeddingManifests";
+import { LOCAL_EMBEDDING_DIMENSIONS } from "./searchConfig";
 
 type CapturedQuery = {
   sql: string;
@@ -24,19 +26,21 @@ function createMockSearchDb(rows: unknown[] = []) {
 }
 
 describe("createPgliteLocalSearchRepository", () => {
-  it("initializes the pgvector-backed local search schema", async () => {
+  it("initializes fallback and EmbeddingGemma pgvector-backed local search schemas", async () => {
     const { db } = createMockSearchDb();
     const repository = createPgliteLocalSearchRepository(() => Promise.resolve(db));
 
     await repository.ensureSchema();
 
+    const schemaSql = db.exec.mock.calls[0]?.[0] ?? "";
     expect(db.exec).toHaveBeenCalledOnce();
-    expect(db.exec.mock.calls[0]?.[0]).toContain("CREATE EXTENSION IF NOT EXISTS vector");
-    expect(db.exec.mock.calls[0]?.[0]).toContain("embedding vector(64)");
-    expect(db.exec.mock.calls[0]?.[0]).toContain("idx_local_search_chunks_embedding");
+    expect(schemaSql).toContain("CREATE EXTENSION IF NOT EXISTS vector");
+    expect(schemaSql).toContain(`embedding vector(${LOCAL_EMBEDDING_DIMENSIONS})`);
+    expect(schemaSql).toContain(`embedding vector(${EMBEDDINGGEMMA_SELECTED_DIMENSIONS})`);
+    expect(schemaSql).toContain("local_search_chunks_256");
   });
 
-  it("upserts search chunks with stable ordered parameters", async () => {
+  it("upserts fallback search chunks with stable ordered parameters", async () => {
     const { db, capturedQueries } = createMockSearchDb();
     const repository = createPgliteLocalSearchRepository(() => Promise.resolve(db));
 
@@ -47,6 +51,7 @@ describe("createPgliteLocalSearchRepository", () => {
       chunkIndex: 0,
       sourceUpdatedAt: "2026-05-01T00:00:00.000Z",
       embedding: "[1,0,0]",
+      embeddingDimensions: LOCAL_EMBEDDING_DIMENSIONS,
       embeddingModel: "deterministic-local-token-hash-v1",
       schemaVersion: 1,
       createdAt: "2026-05-02T00:00:00.000Z",
@@ -69,17 +74,44 @@ describe("createPgliteLocalSearchRepository", () => {
     ]);
   });
 
-  it("soft-deletes active chunks for a record", async () => {
+  it("upserts EmbeddingGemma search chunks into the 256-dimensional table", async () => {
+    const { db, capturedQueries } = createMockSearchDb();
+    const repository = createPgliteLocalSearchRepository(() => Promise.resolve(db));
+
+    await repository.upsertSearchChunk({
+      id: "note-1:0:gemma",
+      recordId: "note-1",
+      recordType: "secure_note",
+      chunkIndex: 0,
+      sourceUpdatedAt: "2026-05-01T00:00:00.000Z",
+      embedding: "[1,0,0]",
+      embeddingDimensions: EMBEDDINGGEMMA_SELECTED_DIMENSIONS,
+      embeddingModel: "embeddinggemma-300m-onnx-q4-256d-candidate",
+      schemaVersion: 1,
+      createdAt: "2026-05-02T00:00:00.000Z",
+      updatedAt: "2026-05-02T00:00:00.000Z"
+    });
+
+    expect(capturedQueries[0]?.sql).toContain("INSERT INTO local_search_chunks_256");
+  });
+
+  it("soft-deletes active chunks for a record from the requested dimension table", async () => {
     const { capturedQueries, db } = createMockSearchDb();
     const repository = createPgliteLocalSearchRepository(() => Promise.resolve(db));
 
-    await repository.markRecordDeleted("secure_note", "note-1", "2026-05-03T00:00:00.000Z");
+    await repository.markRecordDeleted(
+      "secure_note",
+      "note-1",
+      EMBEDDINGGEMMA_SELECTED_DIMENSIONS,
+      "2026-05-03T00:00:00.000Z"
+    );
 
+    expect(capturedQueries[0]?.sql).toContain("UPDATE local_search_chunks_256");
     expect(capturedQueries[0]?.sql).toContain("SET deleted_at = $1");
     expect(capturedQueries[0]?.params).toEqual(["2026-05-03T00:00:00.000Z", "secure_note", "note-1"]);
   });
 
-  it("lists active chunk snapshots", async () => {
+  it("lists active chunk snapshots for the requested model and dimensions", async () => {
     const rows = [
       {
         record_id: "note-1",
@@ -89,9 +121,17 @@ describe("createPgliteLocalSearchRepository", () => {
     const { capturedQueries, db } = createMockSearchDb(rows);
     const repository = createPgliteLocalSearchRepository(() => Promise.resolve(db));
 
-    await expect(repository.listActiveChunkSnapshots("secure_note", 0)).resolves.toEqual(rows);
+    await expect(
+      repository.listActiveChunkSnapshots(
+        "secure_note",
+        0,
+        "embeddinggemma-300m-onnx-q4-256d-candidate",
+        EMBEDDINGGEMMA_SELECTED_DIMENSIONS
+      )
+    ).resolves.toEqual(rows);
     expect(capturedQueries[0]?.sql).toContain("SELECT record_id, source_updated_at");
-    expect(capturedQueries[0]?.params).toEqual(["secure_note", 0]);
+    expect(capturedQueries[0]?.sql).toContain("local_search_chunks_256");
+    expect(capturedQueries[0]?.params).toEqual(["secure_note", 0, "embeddinggemma-300m-onnx-q4-256d-candidate"]);
   });
 
   it("maps semantic distances into non-negative ranked candidates", async () => {
@@ -105,7 +145,8 @@ describe("createPgliteLocalSearchRepository", () => {
       repository.findSemanticCandidates({
         recordType: "secure_note",
         embedding: "[1,0,0]",
-        embeddingModel: "deterministic-local-token-hash-v1",
+        embeddingDimensions: EMBEDDINGGEMMA_SELECTED_DIMENSIONS,
+        embeddingModel: "embeddinggemma-300m-onnx-q4-256d-candidate",
         schemaVersion: 1,
         limit: 5
       })
@@ -114,10 +155,11 @@ describe("createPgliteLocalSearchRepository", () => {
       { id: "far-note", score: 0 }
     ]);
     expect(capturedQueries[0]?.sql).toContain("embedding <=> $1::vector");
+    expect(capturedQueries[0]?.sql).toContain("local_search_chunks_256");
     expect(capturedQueries[0]?.params).toEqual([
       "[1,0,0]",
       "secure_note",
-      "deterministic-local-token-hash-v1",
+      "embeddinggemma-300m-onnx-q4-256d-candidate",
       1,
       5
     ]);
