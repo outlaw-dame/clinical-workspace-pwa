@@ -91,15 +91,16 @@ function getLoadedModel(manifestId: string): LoadedModel {
 async function loadModel(manifest: LocalEmbeddingModelManifest): Promise<LoadedModel> {
   if (loadedModel?.manifest.id === manifest.id) return loadedModel;
 
-  if (loadingManifestId !== manifest.id) {
+  if (loadingManifestId !== manifest.id || loadingModelPromise === undefined) {
     loadingModelPromise = loadModelOnce(manifest);
     loadingManifestId = manifest.id;
   }
 
-  loadedModel = await loadingModelPromise;
+  const model = await loadingModelPromise;
+  loadedModel = model;
   loadingModelPromise = undefined;
   loadingManifestId = undefined;
-  return loadedModel;
+  return model;
 }
 
 async function loadModelOnce(manifest: LocalEmbeddingModelManifest): Promise<LoadedModel> {
