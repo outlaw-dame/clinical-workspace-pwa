@@ -3,6 +3,7 @@ import type { LocalEmbeddingModelManifest } from "./embeddingManifest";
 import { LocalEmbeddingProviderError } from "./embeddingProviderErrors";
 
 const MAX_PROMPT_FIELD_LENGTH = 8_000;
+const MAX_PROMPT_SANITATION_INPUT_LENGTH = 16_000;
 const FALLBACK_DOCUMENT_TITLE = "none";
 
 export type EmbeddingDocumentPromptInput = {
@@ -35,7 +36,9 @@ function requirePromptPolicy(manifest: LocalEmbeddingModelManifest): NonNullable
 }
 
 function sanitizePromptField(value: string): string {
-  return replaceUnsafeControlCharacters(value)
+  const boundedInput = value.slice(0, MAX_PROMPT_SANITATION_INPUT_LENGTH);
+
+  return replaceUnsafeControlCharacters(boundedInput)
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, MAX_PROMPT_FIELD_LENGTH);
