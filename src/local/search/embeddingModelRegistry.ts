@@ -9,8 +9,9 @@ import {
   type LocalEmbeddingPurpose
 } from "./embeddingProvider";
 import { isLocalEmbeddingProviderError } from "./embeddingProviderErrors";
+import { canUseLocalTransformerWorkerRuntime } from "./embeddingRuntimeCapabilities";
 import { assertValidLocalEmbeddingManifest } from "./embeddingManifestValidation";
-import { getActiveLocalEmbeddingManifest } from "./localEmbeddingManifests";
+import { getActiveLocalEmbeddingManifest, getFallbackLocalEmbeddingManifest } from "./localEmbeddingManifests";
 import { sanitizeSearchQuery } from "./searchSanitization";
 
 export type LocalEmbeddingResult = {
@@ -21,7 +22,14 @@ export type LocalEmbeddingResult = {
 export const preferredLocalEmbeddingProvider = embeddingGemmaLocalEmbeddingProvider;
 export const fallbackLocalEmbeddingProvider = deterministicLocalEmbeddingProvider;
 
+let preferFallbackForSession = false;
+
 export function getActiveLocalEmbeddingProvider(): LocalEmbeddingProvider {
+  if (preferFallbackForSession || !canUseLocalTransformerWorkerRuntime()) {
+    assertValidLocalEmbeddingManifest(getFallbackLocalEmbeddingManifest());
+    return fallbackLocalEmbeddingProvider;
+  }
+
   assertValidLocalEmbeddingManifest(getActiveLocalEmbeddingManifest());
   return preferredLocalEmbeddingProvider;
 }
@@ -61,17 +69,26 @@ async function createEmbeddingResult(
   signal: AbortSignal | undefined
 ): Promise<LocalEmbeddingResult> {
   const input = createLocalEmbeddingInput(text, purpose, signal);
+  const activeProvider = getActiveLocalEmbeddingProvider();
+
+  if (activeProvider === fallbackLocalEmbeddingProvider) {
+    return {
+      embedding: await createEmbeddingWithProvider(fallbackLocalEmbeddingProvider, input),
+      provider: fallbackLocalEmbeddingProvider
+    };
+  }
 
   try {
     return {
-      embedding: await createEmbeddingWithProvider(preferredLocalEmbeddingProvider, input),
-      provider: preferredLocalEmbeddingProvider
+      embedding: await createEmbeddingWithProvider(activeProvider, input),
+      provider: activeProvider
     };
   } catch (error) {
     if (isLocalEmbeddingAbortError(error) || (isLocalEmbeddingProviderError(error) && error.code === "aborted")) {
       throw error;
     }
 
+    preferFallbackForSession = true;
     console.warn("EmbeddingGemma unavailable; using deterministic local fallback", error);
     return {
       embedding: await createEmbeddingWithProvider(fallbackLocalEmbeddingProvider, input),
