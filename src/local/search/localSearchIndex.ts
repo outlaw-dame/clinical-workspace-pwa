@@ -7,6 +7,7 @@ import {
 } from "./embeddingModelRegistry";
 import { reciprocalRankFusion } from "./hybridFusion";
 import { createLexicalCandidates } from "./lexicalSearch";
+import { EMBEDDINGGEMMA_SELECTED_DIMENSIONS } from "./localEmbeddingManifests";
 import {
   getDefaultLocalSearchRepository,
   type LocalSearchRepository
@@ -19,6 +20,7 @@ import {
 import { createSafePreview, sanitizeSearchQuery } from "./searchSanitization";
 import {
   DEFAULT_LOCAL_SEARCH_LIMIT,
+  LOCAL_EMBEDDING_DIMENSIONS,
   LOCAL_SEARCH_SCHEMA_VERSION,
   MAX_LOCAL_SEARCH_LIMIT
 } from "./searchConfig";
@@ -38,6 +40,7 @@ type LocalSearchRuntimeOptions = LocalSearchOptions & {
 
 const REPAIR_BATCH_SIZE = 12;
 const REPAIR_DEBOUNCE_MS = 500;
+const SEARCH_EMBEDDING_DIMENSIONS = [LOCAL_EMBEDDING_DIMENSIONS, EMBEDDINGGEMMA_SELECTED_DIMENSIONS] as const;
 const schemaInitializationCache = new WeakMap<LocalSearchRepository, Promise<void>>();
 
 export async function ensureLocalSearchSchema(
@@ -90,8 +93,12 @@ export async function removeSecureNoteFromSearchIndex(
   repository = getDefaultLocalSearchRepository()
 ): Promise<void> {
   await ensureLocalSearchSchema(repository);
-  const provider = getActiveLocalEmbeddingProvider();
-  await repository.markRecordDeleted("secure_note", noteId, provider.dimensions, new Date().toISOString());
+  const deletedAt = new Date().toISOString();
+  await Promise.all(
+    SEARCH_EMBEDDING_DIMENSIONS.map((dimensions) =>
+      repository.markRecordDeleted("secure_note", noteId, dimensions, deletedAt)
+    )
+  );
 }
 
 export async function removeSecureNoteFromSearchIndexSafely(noteId: string): Promise<void> {
