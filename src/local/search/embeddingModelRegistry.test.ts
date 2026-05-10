@@ -3,19 +3,22 @@ import {
   createDocumentEmbedding,
   createLocalEmbedding,
   createQueryEmbeddingWithProvider,
+  fallbackLocalEmbeddingProvider,
   getActiveLocalEmbeddingProvider,
+  preferredLocalEmbeddingProvider,
   toPgVector
 } from "./embeddingModelRegistry";
 import {
   EMBEDDINGGEMMA_CANDIDATE_MODEL_ID,
   EMBEDDINGGEMMA_SELECTED_DIMENSIONS,
   getActiveLocalEmbeddingManifest,
-  getCandidateLocalEmbeddingManifests
+  getCandidateLocalEmbeddingManifests,
+  getFallbackLocalEmbeddingManifest
 } from "./localEmbeddingManifests";
 import { LOCAL_EMBEDDING_DIMENSIONS, LOCAL_EMBEDDING_MODEL } from "./searchConfig";
 
 describe("createLocalEmbedding", () => {
-  it("creates stable normalized vectors with configured dimensions", () => {
+  it("creates stable normalized fallback vectors with configured dimensions", () => {
     const first = createLocalEmbedding("sleep medication stress");
     const second = createLocalEmbedding("sleep medication stress");
 
@@ -26,49 +29,57 @@ describe("createLocalEmbedding", () => {
     expect(magnitude).toBeCloseTo(1, 5);
   });
 
-  it("returns an all-zero vector for empty searchable text", () => {
+  it("returns an all-zero vector for empty searchable fallback text", () => {
     expect(createLocalEmbedding(" ")).toEqual(new Array<number>(LOCAL_EMBEDDING_DIMENSIONS).fill(0));
   });
 });
 
 describe("embedding provider facade", () => {
-  it("exposes the active local embedding provider metadata", () => {
+  it("prefers EmbeddingGemma when local worker runtime support is available", () => {
+    expect(preferredLocalEmbeddingProvider.id).toBe("embeddinggemma-300m-onnx-q4-256d-candidate");
+    expect(preferredLocalEmbeddingProvider.dimensions).toBe(EMBEDDINGGEMMA_SELECTED_DIMENSIONS);
+    expect(preferredLocalEmbeddingProvider.privacyBoundary).toBe("local-only");
+  });
+
+  it("keeps deterministic embeddings as the fallback provider", () => {
+    expect(fallbackLocalEmbeddingProvider.id).toBe(LOCAL_EMBEDDING_MODEL);
+    expect(fallbackLocalEmbeddingProvider.dimensions).toBe(LOCAL_EMBEDDING_DIMENSIONS);
+    expect(getFallbackLocalEmbeddingManifest().activationState).toBe("fallback");
+  });
+
+  it("falls back to deterministic embeddings in the Node test runtime", () => {
     const provider = getActiveLocalEmbeddingProvider();
 
     expect(provider.id).toBe(LOCAL_EMBEDDING_MODEL);
     expect(provider.dimensions).toBe(LOCAL_EMBEDDING_DIMENSIONS);
-    expect(provider.privacyBoundary).toBe("local-only");
   });
 
-  it("exposes the active deterministic fallback manifest before model activation", () => {
+  it("exposes EmbeddingGemma as the active manifest", () => {
     const manifest = getActiveLocalEmbeddingManifest();
 
-    expect(manifest.id).toBe(LOCAL_EMBEDDING_MODEL);
-    expect(manifest.runtime).toBe("deterministic-token-hash");
-    expect(manifest.quality).toBe("fallback");
+    expect(manifest.modelId).toBe(EMBEDDINGGEMMA_CANDIDATE_MODEL_ID);
+    expect(manifest.dimensions).toBe(EMBEDDINGGEMMA_SELECTED_DIMENSIONS);
+    expect(manifest.runtime).toBe("local-transformer-worker");
+    expect(manifest.quality).toBe("candidate");
     expect(manifest.activationState).toBe("active");
-    expect(manifest.artifactSource).toBe("bundled");
     expect(manifest.privacyBoundary).toBe("local-only");
   });
 
-  it("exposes EmbeddingGemma as a candidate manifest without activating it", () => {
+  it("keeps EmbeddingGemma listed in candidate manifests for diagnostics", () => {
     const [candidate] = getCandidateLocalEmbeddingManifests();
 
     expect(candidate?.modelId).toBe(EMBEDDINGGEMMA_CANDIDATE_MODEL_ID);
     expect(candidate?.dimensions).toBe(EMBEDDINGGEMMA_SELECTED_DIMENSIONS);
-    expect(candidate?.runtime).toBe("local-transformer-worker");
-    expect(candidate?.quality).toBe("candidate");
-    expect(candidate?.activationState).toBe("candidate");
-    expect(getActiveLocalEmbeddingManifest().id).not.toBe(candidate?.id);
+    expect(candidate?.activationState).toBe("active");
   });
 
-  it("creates document embeddings through the active provider", async () => {
+  it("creates document embeddings through the resolved provider", async () => {
     const embedding = await createDocumentEmbedding("sleep medication stress");
 
     expect(embedding).toHaveLength(LOCAL_EMBEDDING_DIMENSIONS);
   });
 
-  it("creates normalized query embeddings through the active provider", async () => {
+  it("creates normalized query embeddings through the resolved provider", async () => {
     const queryEmbedding = await createQueryEmbeddingWithProvider("Sleep\n\tStress");
     const documentEmbedding = await createDocumentEmbedding("sleep stress");
 
@@ -85,7 +96,7 @@ describe("toPgVector", () => {
     expect(toPgVector(vector).endsWith("]")).toBe(true);
   });
 
-  it("rejects vectors with mismatched dimensions", () => {
-    expect(() => toPgVector([1, 2, 3])).toThrow("Local embedding dimensions");
+  it("rejects vectors with mismatched explicit dimensions", () => {
+    expect(() => toPgVector([1, 2, 3], LOCAL_EMBEDDING_DIMENSIONS)).toThrow("Local embedding dimensions");
   });
 });
