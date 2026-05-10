@@ -10,6 +10,7 @@ import { createLexicalCandidates } from "./lexicalSearch";
 import { EMBEDDINGGEMMA_SELECTED_DIMENSIONS } from "./localEmbeddingManifests";
 import {
   getDefaultLocalSearchRepository,
+  resolveSearchEmbeddingDimensions,
   type LocalSearchRepository
 } from "./searchRepository";
 import {
@@ -63,7 +64,8 @@ export async function indexSecureNoteForSearch(
   await ensureLocalSearchSchema(repository);
   const now = new Date().toISOString();
   const embeddingResult = await createDocumentEmbeddingResult(`${note.title}\n\n${note.body}`);
-  const embedding = toPgVector(embeddingResult.embedding, embeddingResult.provider.dimensions);
+  const embeddingDimensions = resolveSearchEmbeddingDimensions(embeddingResult.provider.dimensions);
+  const embedding = toPgVector(embeddingResult.embedding, embeddingDimensions);
 
   await repository.upsertSearchChunk({
     id: `${note.id}:0:${embeddingResult.provider.id}`,
@@ -72,7 +74,7 @@ export async function indexSecureNoteForSearch(
     chunkIndex: 0,
     sourceUpdatedAt: note.updatedAt,
     embedding,
-    embeddingDimensions: embeddingResult.provider.dimensions,
+    embeddingDimensions,
     embeddingModel: embeddingResult.provider.id,
     schemaVersion: LOCAL_SEARCH_SCHEMA_VERSION,
     createdAt: now,
@@ -122,7 +124,8 @@ export async function repairSecureNoteSearchIndex(
 ): Promise<void> {
   await ensureLocalSearchSchema(repository);
   const provider = getActiveLocalEmbeddingProvider();
-  const indexedRows = await repository.listActiveChunkSnapshots("secure_note", 0, provider.id, provider.dimensions);
+  const providerDimensions = resolveSearchEmbeddingDimensions(provider.dimensions);
+  const indexedRows = await repository.listActiveChunkSnapshots("secure_note", 0, provider.id, providerDimensions);
   const repairPlan = planSecureNoteSearchIndexRepair(notes, indexedRows);
 
   await runInBatches(repairPlan.staleNotes, REPAIR_BATCH_SIZE, (note) => indexSecureNoteForSearch(note, repository));
@@ -203,12 +206,13 @@ async function createSemanticCandidates(
   try {
     await ensureLocalSearchSchema(repository);
     const embeddingResult = await createQueryEmbeddingResult(queryText);
-    const queryEmbedding = toPgVector(embeddingResult.embedding, embeddingResult.provider.dimensions);
+    const embeddingDimensions = resolveSearchEmbeddingDimensions(embeddingResult.provider.dimensions);
+    const queryEmbedding = toPgVector(embeddingResult.embedding, embeddingDimensions);
 
     return repository.findSemanticCandidates({
       recordType: "secure_note",
       embedding: queryEmbedding,
-      embeddingDimensions: embeddingResult.provider.dimensions,
+      embeddingDimensions,
       embeddingModel: embeddingResult.provider.id,
       schemaVersion: LOCAL_SEARCH_SCHEMA_VERSION,
       limit
