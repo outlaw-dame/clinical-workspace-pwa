@@ -2,12 +2,15 @@ import { LocalEmbeddingProviderError } from "./embeddingProviderErrors";
 
 export type LocalEmbeddingArtifactDtype = "fp32" | "q8" | "q4";
 
+export type LocalEmbeddingArtifactRole = "model-graph" | "model-data" | "tokenizer-json" | "tokenizer-model";
+
 export type LocalEmbeddingArtifactIntegrity = {
   path: string;
-  dtype: LocalEmbeddingArtifactDtype;
+  role: LocalEmbeddingArtifactRole;
   sha256: string;
   remoteSizeLabel: string;
   required: boolean;
+  dtype?: LocalEmbeddingArtifactDtype;
 };
 
 export type LocalEmbeddingArtifactIntegrityPolicy = {
@@ -27,6 +30,7 @@ export function assertValidArtifactIntegrityPolicy(policy: LocalEmbeddingArtifac
   }
 
   const paths = new Set<string>();
+  const requiredRoles = new Set<LocalEmbeddingArtifactRole>();
 
   for (const artifact of policy.artifacts) {
     if (!artifact.path || !artifact.remoteSizeLabel) {
@@ -39,8 +43,26 @@ export function assertValidArtifactIntegrityPolicy(policy: LocalEmbeddingArtifac
 
     paths.add(artifact.path);
 
+    if (artifact.required) {
+      requiredRoles.add(artifact.role);
+    }
+
+    if ((artifact.role === "model-graph" || artifact.role === "model-data") && artifact.dtype === undefined) {
+      throw new LocalEmbeddingProviderError("invalid_manifest", "Embedding model artifacts must declare a dtype");
+    }
+
+    if ((artifact.role === "tokenizer-json" || artifact.role === "tokenizer-model") && artifact.dtype !== undefined) {
+      throw new LocalEmbeddingProviderError("invalid_manifest", "Embedding tokenizer artifacts must not declare a dtype");
+    }
+
     if (!/^[a-f0-9]{64}$/u.test(artifact.sha256)) {
       throw new LocalEmbeddingProviderError("invalid_manifest", "Embedding artifact SHA-256 must be lowercase hex");
+    }
+  }
+
+  for (const role of ["model-graph", "model-data", "tokenizer-json", "tokenizer-model"] as const) {
+    if (!requiredRoles.has(role)) {
+      throw new LocalEmbeddingProviderError("invalid_manifest", "Embedding artifact policy is missing a required artifact role");
     }
   }
 }
