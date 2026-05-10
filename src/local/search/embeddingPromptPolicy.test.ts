@@ -16,6 +16,12 @@ describe("createEmbeddingQueryPrompt", () => {
     );
   });
 
+  it("bounds very large query fields before sanitation", () => {
+    const prompt = createEmbeddingQueryPrompt(embeddingGemma300mCandidateManifest, `${"a".repeat(20_000)} trailing`);
+
+    expect(prompt).toBe(`task: search result | query: ${"a".repeat(8_000)}`);
+  });
+
   it("rejects manifests without prompt policies", () => {
     expect(() => createEmbeddingQueryPrompt(deterministicLocalEmbeddingManifest, "sleep")).toThrow(
       LocalEmbeddingProviderError
@@ -48,5 +54,14 @@ describe("createEmbeddingDocumentPrompt", () => {
         text: "Follow\u0007up"
       })
     ).toBe("title: Initial Intake | text: Follow up");
+  });
+
+  it("bounds very large document fields before sanitation", () => {
+    const prompt = createEmbeddingDocumentPrompt(embeddingGemma300mCandidateManifest, {
+      title: "Large note",
+      text: `${"b".repeat(20_000)} trailing`
+    });
+
+    expect(prompt).toBe(`title: Large note | text: ${"b".repeat(8_000)}`);
   });
 });
