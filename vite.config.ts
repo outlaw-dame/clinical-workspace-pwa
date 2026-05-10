@@ -70,6 +70,9 @@ export default defineConfig({
       }
     })
   ],
+  worker: {
+    format: "es"
+  },
   server: {
     strictPort: true,
     port: 5173

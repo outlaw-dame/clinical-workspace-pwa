@@ -1,6 +1,9 @@
 import { getLocalDb } from "../db/client";
 import { LOCAL_EMBEDDING_DIMENSIONS, LOCAL_SEARCH_SCHEMA_VERSION } from "./searchConfig";
+import { EMBEDDINGGEMMA_SELECTED_DIMENSIONS } from "./localEmbeddingManifests";
 import type { RankedSearchCandidate, SearchableRecordType, SearchIndexChunkSnapshot } from "./searchTypes";
+
+export type SupportedSearchEmbeddingDimensions = typeof LOCAL_EMBEDDING_DIMENSIONS | typeof EMBEDDINGGEMMA_SELECTED_DIMENSIONS;
 
 export type SearchChunkUpsert = {
   id: string;
@@ -9,6 +12,7 @@ export type SearchChunkUpsert = {
   chunkIndex: number;
   sourceUpdatedAt: string;
   embedding: string;
+  embeddingDimensions: SupportedSearchEmbeddingDimensions;
   embeddingModel: string;
   schemaVersion: number;
   createdAt: string;
@@ -18,6 +22,7 @@ export type SearchChunkUpsert = {
 export type SemanticSearchRequest = {
   recordType: SearchableRecordType;
   embedding: string;
+  embeddingDimensions: SupportedSearchEmbeddingDimensions;
   embeddingModel: string;
   schemaVersion: number;
   limit: number;
@@ -26,8 +31,18 @@ export type SemanticSearchRequest = {
 export type LocalSearchRepository = {
   ensureSchema: () => Promise<void>;
   upsertSearchChunk: (chunk: SearchChunkUpsert) => Promise<void>;
-  markRecordDeleted: (recordType: SearchableRecordType, recordId: string, deletedAt: string) => Promise<void>;
-  listActiveChunkSnapshots: (recordType: SearchableRecordType, chunkIndex: number) => Promise<SearchIndexChunkSnapshot[]>;
+  markRecordDeleted: (
+    recordType: SearchableRecordType,
+    recordId: string,
+    embeddingDimensions: SupportedSearchEmbeddingDimensions,
+    deletedAt: string
+  ) => Promise<void>;
+  listActiveChunkSnapshots: (
+    recordType: SearchableRecordType,
+    chunkIndex: number,
+    embeddingModel: string,
+    embeddingDimensions: SupportedSearchEmbeddingDimensions
+  ) => Promise<SearchIndexChunkSnapshot[]>;
   findSemanticCandidates: (request: SemanticSearchRequest) => Promise<RankedSearchCandidate[]>;
 };
 
@@ -52,6 +67,12 @@ export function getDefaultLocalSearchRepository(): LocalSearchRepository {
   return defaultLocalSearchRepository;
 }
 
+export function resolveSearchEmbeddingDimensions(dimensions: number): SupportedSearchEmbeddingDimensions {
+  if (dimensions === LOCAL_EMBEDDING_DIMENSIONS) return LOCAL_EMBEDDING_DIMENSIONS;
+  if (dimensions === EMBEDDINGGEMMA_SELECTED_DIMENSIONS) return EMBEDDINGGEMMA_SELECTED_DIMENSIONS;
+  throw new Error(`Unsupported local search embedding dimensions: ${dimensions}`);
+}
+
 export function createPgliteLocalSearchRepository(getDb: () => Promise<SearchDb> = getLocalDb): LocalSearchRepository {
   return {
     async ensureSchema() {
@@ -60,77 +81,47 @@ export function createPgliteLocalSearchRepository(getDb: () => Promise<SearchDb>
       await db.exec(`
         CREATE EXTENSION IF NOT EXISTS vector;
 
-        CREATE TABLE IF NOT EXISTS local_search_chunks (
-          id TEXT PRIMARY KEY,
-          record_id TEXT NOT NULL,
-          record_type TEXT NOT NULL,
-          chunk_index INTEGER NOT NULL,
-          source_updated_at TEXT NOT NULL,
-          embedding vector(${LOCAL_EMBEDDING_DIMENSIONS}) NOT NULL,
-          embedding_model TEXT NOT NULL,
-          schema_version INTEGER NOT NULL DEFAULT ${LOCAL_SEARCH_SCHEMA_VERSION},
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL,
-          deleted_at TEXT,
-          UNIQUE (record_id, record_type, chunk_index)
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_local_search_chunks_record
-          ON local_search_chunks (record_id, record_type)
-          WHERE deleted_at IS NULL;
-
-        CREATE INDEX IF NOT EXISTS idx_local_search_chunks_embedding
-          ON local_search_chunks USING hnsw (embedding vector_cosine_ops);
+        ${createSearchTableSql("local_search_chunks", LOCAL_EMBEDDING_DIMENSIONS, false)}
+        ${createSearchTableSql("local_search_chunks_256", EMBEDDINGGEMMA_SELECTED_DIMENSIONS, true)}
       `);
     },
 
     async upsertSearchChunk(chunk) {
       const db = await getDb();
-      await db.query(
-        `INSERT INTO local_search_chunks (
-           id, record_id, record_type, chunk_index, source_updated_at,
-           embedding, embedding_model, schema_version, created_at, updated_at, deleted_at
-         ) VALUES ($1, $2, $3, $4, $5, $6::vector, $7, $8, $9, $10, NULL)
-         ON CONFLICT (record_id, record_type, chunk_index)
-         DO UPDATE SET
-           source_updated_at = EXCLUDED.source_updated_at,
-           embedding = EXCLUDED.embedding,
-           embedding_model = EXCLUDED.embedding_model,
-           schema_version = EXCLUDED.schema_version,
-           updated_at = EXCLUDED.updated_at,
-           deleted_at = NULL`,
-        [
-          chunk.id,
-          chunk.recordId,
-          chunk.recordType,
-          chunk.chunkIndex,
-          chunk.sourceUpdatedAt,
-          chunk.embedding,
-          chunk.embeddingModel,
-          chunk.schemaVersion,
-          chunk.createdAt,
-          chunk.updatedAt
-        ]
-      );
+      await db.query(createUpsertSql(chunk.embeddingDimensions), [
+        chunk.id,
+        chunk.recordId,
+        chunk.recordType,
+        chunk.chunkIndex,
+        chunk.sourceUpdatedAt,
+        chunk.embedding,
+        chunk.embeddingModel,
+        chunk.schemaVersion,
+        chunk.createdAt,
+        chunk.updatedAt
+      ]);
     },
 
-    async markRecordDeleted(recordType, recordId, deletedAt) {
+    async markRecordDeleted(recordType, recordId, embeddingDimensions, deletedAt) {
       const db = await getDb();
       await db.query(
-        `UPDATE local_search_chunks
+        `UPDATE ${getSearchTableName(embeddingDimensions)}
          SET deleted_at = $1, updated_at = $1
          WHERE record_type = $2 AND record_id = $3 AND deleted_at IS NULL`,
         [deletedAt, recordType, recordId]
       );
     },
 
-    async listActiveChunkSnapshots(recordType, chunkIndex) {
+    async listActiveChunkSnapshots(recordType, chunkIndex, embeddingModel, embeddingDimensions) {
       const db = await getDb();
       const result = await db.query<SearchIndexChunkSnapshot>(
         `SELECT record_id, source_updated_at
-         FROM local_search_chunks
-         WHERE record_type = $1 AND chunk_index = $2 AND deleted_at IS NULL`,
-        [recordType, chunkIndex]
+         FROM ${getSearchTableName(embeddingDimensions)}
+         WHERE record_type = $1
+           AND chunk_index = $2
+           AND embedding_model = $3
+           AND deleted_at IS NULL`,
+        [recordType, chunkIndex, embeddingModel]
       );
 
       return result.rows;
@@ -140,7 +131,7 @@ export function createPgliteLocalSearchRepository(getDb: () => Promise<SearchDb>
       const db = await getDb();
       const result = await db.query<SemanticSearchRow>(
         `SELECT record_id, embedding <=> $1::vector AS distance
-         FROM local_search_chunks
+         FROM ${getSearchTableName(request.embeddingDimensions)}
          WHERE record_type = $2
            AND embedding_model = $3
            AND schema_version = $4
@@ -156,4 +147,62 @@ export function createPgliteLocalSearchRepository(getDb: () => Promise<SearchDb>
       }));
     }
   };
+}
+
+function getSearchTableName(dimensions: SupportedSearchEmbeddingDimensions): string {
+  return dimensions === LOCAL_EMBEDDING_DIMENSIONS ? "local_search_chunks" : "local_search_chunks_256";
+}
+
+function createUpsertSql(dimensions: SupportedSearchEmbeddingDimensions): string {
+  const conflictColumns =
+    dimensions === LOCAL_EMBEDDING_DIMENSIONS
+      ? "record_id, record_type, chunk_index"
+      : "record_id, record_type, chunk_index, embedding_model";
+
+  return `INSERT INTO ${getSearchTableName(dimensions)} (
+     id, record_id, record_type, chunk_index, source_updated_at,
+     embedding, embedding_model, schema_version, created_at, updated_at, deleted_at
+   ) VALUES ($1, $2, $3, $4, $5, $6::vector, $7, $8, $9, $10, NULL)
+   ON CONFLICT (${conflictColumns})
+   DO UPDATE SET
+     source_updated_at = EXCLUDED.source_updated_at,
+     embedding = EXCLUDED.embedding,
+     embedding_model = EXCLUDED.embedding_model,
+     schema_version = EXCLUDED.schema_version,
+     updated_at = EXCLUDED.updated_at,
+     deleted_at = NULL`;
+}
+
+function createSearchTableSql(
+  tableName: string,
+  dimensions: SupportedSearchEmbeddingDimensions,
+  modelAwareConstraint: boolean
+): string {
+  const uniqueColumns = modelAwareConstraint
+    ? "record_id, record_type, chunk_index, embedding_model"
+    : "record_id, record_type, chunk_index";
+
+  return `
+    CREATE TABLE IF NOT EXISTS ${tableName} (
+      id TEXT PRIMARY KEY,
+      record_id TEXT NOT NULL,
+      record_type TEXT NOT NULL,
+      chunk_index INTEGER NOT NULL,
+      source_updated_at TEXT NOT NULL,
+      embedding vector(${dimensions}) NOT NULL,
+      embedding_model TEXT NOT NULL,
+      schema_version INTEGER NOT NULL DEFAULT ${LOCAL_SEARCH_SCHEMA_VERSION},
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT,
+      UNIQUE (${uniqueColumns})
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_${tableName}_record
+      ON ${tableName} (record_id, record_type, embedding_model)
+      WHERE deleted_at IS NULL;
+
+    CREATE INDEX IF NOT EXISTS idx_${tableName}_embedding
+      ON ${tableName} USING hnsw (embedding vector_cosine_ops);
+  `;
 }

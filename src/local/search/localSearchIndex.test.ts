@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { EMBEDDINGGEMMA_SELECTED_DIMENSIONS } from "./localEmbeddingManifests";
 import type { LocalSearchRepository } from "./searchRepository";
+import { LOCAL_EMBEDDING_DIMENSIONS } from "./searchConfig";
 import type { SearchableSecureNote } from "./searchTypes";
 
 const mocks = vi.hoisted(() => ({
@@ -36,7 +38,7 @@ beforeEach(() => {
 });
 
 describe("indexSecureNoteForSearch", () => {
-  it("writes search chunks through the injected repository", async () => {
+  it("writes search chunks through the injected repository using the resolved provider", async () => {
     const { indexSecureNoteForSearch } = await import("./localSearchIndex");
     const repository = createMockRepository();
 
@@ -45,11 +47,12 @@ describe("indexSecureNoteForSearch", () => {
     expect(repository.ensureSchema).toHaveBeenCalledOnce();
     expect(repository.upsertSearchChunk).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: "sleep-note:0",
+        id: "sleep-note:0:deterministic-local-token-hash-v1",
         recordId: "sleep-note",
         recordType: "secure_note",
         chunkIndex: 0,
         sourceUpdatedAt: "2026-05-01T00:00:00.000Z",
+        embeddingDimensions: LOCAL_EMBEDDING_DIMENSIONS,
         embeddingModel: "deterministic-local-token-hash-v1",
         schemaVersion: 1
       })
@@ -76,9 +79,25 @@ describe("repairSecureNoteSearchIndex", () => {
 
     await repairSecureNoteSearchIndex([notes[0]!], repository);
 
-    expect(repository.listActiveChunkSnapshots).toHaveBeenCalledWith("secure_note", 0);
+    expect(repository.listActiveChunkSnapshots).toHaveBeenCalledWith(
+      "secure_note",
+      0,
+      "deterministic-local-token-hash-v1",
+      LOCAL_EMBEDDING_DIMENSIONS
+    );
     expect(repository.upsertSearchChunk).toHaveBeenCalledWith(expect.objectContaining({ recordId: "sleep-note" }));
-    expect(repository.markRecordDeleted).toHaveBeenCalledWith("secure_note", "removed-note", expect.any(String));
+    expect(repository.markRecordDeleted).toHaveBeenCalledWith(
+      "secure_note",
+      "removed-note",
+      LOCAL_EMBEDDING_DIMENSIONS,
+      expect.any(String)
+    );
+    expect(repository.markRecordDeleted).toHaveBeenCalledWith(
+      "secure_note",
+      "removed-note",
+      EMBEDDINGGEMMA_SELECTED_DIMENSIONS,
+      expect.any(String)
+    );
     expect(mocks.getLocalDb).not.toHaveBeenCalled();
   });
 });
@@ -102,7 +121,7 @@ describe("searchSecureNotes", () => {
     });
   });
 
-  it("uses the injected repository for semantic searches", async () => {
+  it("uses the injected repository for semantic searches with the resolved provider", async () => {
     const { searchSecureNotes } = await import("./localSearchIndex");
     const repository = createMockRepository({
       semanticCandidates: [{ id: "sleep-note", score: 0.92 }]
@@ -118,6 +137,7 @@ describe("searchSecureNotes", () => {
     expect(repository.findSemanticCandidates).toHaveBeenCalledWith(
       expect.objectContaining({
         recordType: "secure_note",
+        embeddingDimensions: LOCAL_EMBEDDING_DIMENSIONS,
         embeddingModel: "deterministic-local-token-hash-v1",
         schemaVersion: 1,
         limit: 5
