@@ -1,35 +1,45 @@
 import { deterministicLocalEmbeddingProvider, createDeterministicTokenHashEmbedding } from "./deterministicEmbeddingProvider";
+import { embeddingGemmaLocalEmbeddingProvider } from "./embeddingGemmaProvider";
 import {
   createEmbeddingWithProvider,
+  isLocalEmbeddingAbortError,
   serializeEmbeddingForPgVector,
   type LocalEmbeddingInput,
   type LocalEmbeddingProvider,
   type LocalEmbeddingPurpose
 } from "./embeddingProvider";
+import { isLocalEmbeddingProviderError } from "./embeddingProviderErrors";
 import { assertValidLocalEmbeddingManifest } from "./embeddingManifestValidation";
 import { getActiveLocalEmbeddingManifest } from "./localEmbeddingManifests";
-import { LOCAL_EMBEDDING_DIMENSIONS } from "./searchConfig";
 import { sanitizeSearchQuery } from "./searchSanitization";
 
-export const activeLocalEmbeddingProvider = deterministicLocalEmbeddingProvider;
+export type LocalEmbeddingResult = {
+  embedding: number[];
+  provider: LocalEmbeddingProvider;
+};
+
+export const preferredLocalEmbeddingProvider = embeddingGemmaLocalEmbeddingProvider;
+export const fallbackLocalEmbeddingProvider = deterministicLocalEmbeddingProvider;
 
 export function getActiveLocalEmbeddingProvider(): LocalEmbeddingProvider {
   assertValidLocalEmbeddingManifest(getActiveLocalEmbeddingManifest());
-  return activeLocalEmbeddingProvider;
+  return preferredLocalEmbeddingProvider;
 }
 
 export async function createDocumentEmbedding(value: string, signal?: AbortSignal): Promise<number[]> {
-  return createEmbeddingWithProvider(
-    activeLocalEmbeddingProvider,
-    createLocalEmbeddingInput(value, "document", signal)
-  );
+  return (await createDocumentEmbeddingResult(value, signal)).embedding;
+}
+
+export async function createDocumentEmbeddingResult(value: string, signal?: AbortSignal): Promise<LocalEmbeddingResult> {
+  return createEmbeddingResult(value, "document", signal);
 }
 
 export async function createQueryEmbeddingWithProvider(value: string, signal?: AbortSignal): Promise<number[]> {
-  return createEmbeddingWithProvider(
-    activeLocalEmbeddingProvider,
-    createLocalEmbeddingInput(value, "query", signal)
-  );
+  return (await createQueryEmbeddingResult(value, signal)).embedding;
+}
+
+export async function createQueryEmbeddingResult(value: string, signal?: AbortSignal): Promise<LocalEmbeddingResult> {
+  return createEmbeddingResult(value, "query", signal);
 }
 
 export function createLocalEmbedding(value: string): number[] {
@@ -41,8 +51,33 @@ export function createQueryEmbedding(value: string): number[] {
   return createLocalEmbedding(query.normalized);
 }
 
-export function toPgVector(value: readonly number[]): string {
-  return serializeEmbeddingForPgVector(value, LOCAL_EMBEDDING_DIMENSIONS);
+export function toPgVector(value: readonly number[], dimensions = value.length): string {
+  return serializeEmbeddingForPgVector(value, dimensions);
+}
+
+async function createEmbeddingResult(
+  text: string,
+  purpose: LocalEmbeddingPurpose,
+  signal: AbortSignal | undefined
+): Promise<LocalEmbeddingResult> {
+  const input = createLocalEmbeddingInput(text, purpose, signal);
+
+  try {
+    return {
+      embedding: await createEmbeddingWithProvider(preferredLocalEmbeddingProvider, input),
+      provider: preferredLocalEmbeddingProvider
+    };
+  } catch (error) {
+    if (isLocalEmbeddingAbortError(error) || (isLocalEmbeddingProviderError(error) && error.code === "aborted")) {
+      throw error;
+    }
+
+    console.warn("EmbeddingGemma unavailable; using deterministic local fallback", error);
+    return {
+      embedding: await createEmbeddingWithProvider(fallbackLocalEmbeddingProvider, input),
+      provider: fallbackLocalEmbeddingProvider
+    };
+  }
 }
 
 function createLocalEmbeddingInput(
