@@ -8,7 +8,7 @@ export type LocalEmbeddingArtifactSource = "bundled" | "origin-cache" | "user-pr
 
 export type LocalEmbeddingDtype = "fp32" | "q8" | "q4";
 
-export type LocalEmbeddingActivationState = "active" | "candidate" | "disabled";
+export type LocalEmbeddingActivationState = "active" | "candidate" | "fallback" | "disabled";
 
 export type LocalEmbeddingPromptPolicy = {
   queryPrefix: string;
