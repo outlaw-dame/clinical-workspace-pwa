@@ -18,7 +18,7 @@ export const deterministicLocalEmbeddingManifest: LocalEmbeddingModelManifest = 
   privacyBoundary: "local-only",
   quality: "fallback",
   artifactSource: "bundled",
-  activationState: "active"
+  activationState: "fallback"
 };
 
 export const embeddingGemma300mCandidateManifest: LocalEmbeddingModelManifest = {
@@ -34,7 +34,7 @@ export const embeddingGemma300mCandidateManifest: LocalEmbeddingModelManifest = 
   privacyBoundary: "local-only",
   quality: "candidate",
   artifactSource: "origin-cache",
-  activationState: "candidate",
+  activationState: "active",
   defaultDtype: "q4",
   fallbackDtypes: ["q8", "fp32"],
   promptPolicy: {
@@ -46,6 +46,10 @@ export const embeddingGemma300mCandidateManifest: LocalEmbeddingModelManifest = 
 };
 
 export function getActiveLocalEmbeddingManifest(): LocalEmbeddingModelManifest {
+  return embeddingGemma300mCandidateManifest;
+}
+
+export function getFallbackLocalEmbeddingManifest(): LocalEmbeddingModelManifest {
   return deterministicLocalEmbeddingManifest;
 }
 
