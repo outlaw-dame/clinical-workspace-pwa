@@ -29,6 +29,7 @@ type LoadedModel = {
 
 let loadedModel: LoadedModel | undefined;
 let loadingModelPromise: Promise<LoadedModel> | undefined;
+let loadingManifestId: string | undefined;
 
 self.addEventListener("message", (event: MessageEvent<LocalEmbeddingWorkerRequest>) => {
   void handleWorkerRequest(event.data);
@@ -43,7 +44,7 @@ async function handleWorkerRequest(request: LocalEmbeddingWorkerRequest): Promis
         return;
       }
       case "create-embedding": {
-        const model = await getLoadedModel(request.manifestId);
+        const model = getLoadedModel(request.manifestId);
         const prompt =
           request.purpose === "query"
             ? createEmbeddingQueryPrompt(model.manifest, request.text)
@@ -62,7 +63,10 @@ async function handleWorkerRequest(request: LocalEmbeddingWorkerRequest): Promis
       case "dispose-model": {
         if (loadedModel?.manifest.id === request.manifestId) {
           loadedModel = undefined;
+        }
+        if (loadingManifestId === request.manifestId) {
           loadingModelPromise = undefined;
+          loadingManifestId = undefined;
         }
         postResponse({ type: "model-disposed", requestId: request.requestId, manifestId: request.manifestId });
         return;
@@ -79,15 +83,22 @@ async function handleWorkerRequest(request: LocalEmbeddingWorkerRequest): Promis
   }
 }
 
-async function getLoadedModel(manifestId: string): Promise<LoadedModel> {
+function getLoadedModel(manifestId: string): LoadedModel {
   if (loadedModel?.manifest.id === manifestId) return loadedModel;
   throw new LocalEmbeddingProviderError("model_not_loaded", "EmbeddingGemma model is not loaded");
 }
 
 async function loadModel(manifest: LocalEmbeddingModelManifest): Promise<LoadedModel> {
   if (loadedModel?.manifest.id === manifest.id) return loadedModel;
-  loadingModelPromise ??= loadModelOnce(manifest);
+
+  if (loadingManifestId !== manifest.id) {
+    loadingModelPromise = loadModelOnce(manifest);
+    loadingManifestId = manifest.id;
+  }
+
   loadedModel = await loadingModelPromise;
+  loadingModelPromise = undefined;
+  loadingManifestId = undefined;
   return loadedModel;
 }
 
@@ -104,8 +115,9 @@ async function loadModelOnce(manifest: LocalEmbeddingModelManifest): Promise<Loa
     ]);
 
     return { manifest, tokenizer, model };
-  } catch (_error) {
+  } catch {
     loadingModelPromise = undefined;
+    loadingManifestId = undefined;
     throw new LocalEmbeddingProviderError("model_load_failed", "EmbeddingGemma model failed to load");
   }
 }
@@ -115,8 +127,7 @@ function extractSentenceEmbedding(sentenceEmbedding: TensorLike | undefined): nu
     throw new LocalEmbeddingProviderError("inference_failed", "EmbeddingGemma output did not include sentence embeddings");
   }
 
-  const value = sentenceEmbedding.tolist();
-  const firstEmbedding = Array.isArray(value) ? value[0] : undefined;
+  const firstEmbedding = getFirstEmbedding(sentenceEmbedding.tolist());
 
   if (!Array.isArray(firstEmbedding)) {
     throw new LocalEmbeddingProviderError("inference_failed", "EmbeddingGemma output shape was invalid");
@@ -128,6 +139,11 @@ function extractSentenceEmbedding(sentenceEmbedding: TensorLike | undefined): nu
     }
     return item;
   });
+}
+
+function getFirstEmbedding(value: unknown): unknown {
+  if (!Array.isArray(value)) return undefined;
+  return value.at(0);
 }
 
 function postResponse(response: LocalEmbeddingWorkerResponse): void {
