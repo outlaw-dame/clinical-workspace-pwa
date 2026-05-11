@@ -7,6 +7,7 @@ export type LocalEmbeddingProviderErrorCode =
   | "model_load_failed"
   | "inference_failed"
   | "invalid_manifest"
+  | "artifact_verification_failed"
   | "aborted";
 
 export class LocalEmbeddingProviderError extends Error {

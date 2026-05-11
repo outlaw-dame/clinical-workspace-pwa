@@ -52,6 +52,7 @@ const VALID_ERROR_CODES = new Set<LocalEmbeddingProviderErrorCode>([
   "model_load_failed",
   "inference_failed",
   "invalid_manifest",
+  "artifact_verification_failed",
   "aborted"
 ]);
 
