@@ -89,10 +89,15 @@ async function waitForVerificationWithCallerAbort(
       },
       (error: unknown) => {
         signal.removeEventListener("abort", abortHandler);
-        reject(error);
+        reject(normalizeArtifactVerificationRejection(error));
       }
     );
   });
+}
+
+function normalizeArtifactVerificationRejection(error: unknown): Error {
+  if (error instanceof Error) return error;
+  return new LocalEmbeddingProviderError("artifact_verification_failed", "EmbeddingGemma artifact verification failed");
 }
 
 function createAbortError(): DOMException {
