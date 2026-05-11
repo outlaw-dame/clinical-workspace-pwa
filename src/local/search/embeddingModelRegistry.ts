@@ -84,7 +84,7 @@ async function createEmbeddingResult(
       provider: activeProvider
     };
   } catch (error) {
-    if (isLocalEmbeddingAbortError(error) || (isLocalEmbeddingProviderError(error) && error.code === "aborted")) {
+    if (isEmbeddingAbort(error)) {
       throw error;
     }
 
@@ -103,4 +103,12 @@ function createLocalEmbeddingInput(
   signal: AbortSignal | undefined
 ): LocalEmbeddingInput {
   return signal === undefined ? { text, purpose } : { text, purpose, signal };
+}
+
+function isEmbeddingAbort(error: unknown): boolean {
+  return (
+    isLocalEmbeddingAbortError(error) ||
+    (isLocalEmbeddingProviderError(error) && error.code === "aborted") ||
+    (error instanceof DOMException && error.name === "AbortError")
+  );
 }
