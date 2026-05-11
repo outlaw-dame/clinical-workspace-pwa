@@ -38,17 +38,24 @@ export function resetEmbeddingGemmaArtifactVerificationForTests(): void {
 }
 
 async function ensureEmbeddingGemmaArtifactsVerified(signal: AbortSignal | undefined): Promise<void> {
-  artifactVerificationPromise ??= ensureEmbeddingArtifactsVerified(
-    getEmbeddingGemma300mArtifactIntegrityPolicy(),
-    signal
-  ).then((status) => {
-    if (status.state !== "verified") {
-      throw new LocalEmbeddingProviderError(
-        "artifact_verification_failed",
-        "EmbeddingGemma artifacts could not be verified"
-      );
-    }
-  });
+  if (artifactVerificationPromise === undefined) {
+    artifactVerificationPromise = ensureEmbeddingArtifactsVerified(
+      getEmbeddingGemma300mArtifactIntegrityPolicy(),
+      signal
+    ).then((status) => {
+      if (status.state !== "verified") {
+        throw new LocalEmbeddingProviderError(
+          "artifact_verification_failed",
+          "EmbeddingGemma artifacts could not be verified"
+        );
+      }
+    });
+  }
 
-  return artifactVerificationPromise;
+  try {
+    await artifactVerificationPromise;
+  } catch (error) {
+    artifactVerificationPromise = undefined;
+    throw error;
+  }
 }
