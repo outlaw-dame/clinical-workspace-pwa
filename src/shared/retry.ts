@@ -36,9 +36,13 @@ export function getBackoffDelayMs(attempt: number, options: RetryOptions): numbe
 function delay(ms: number, signal: AbortSignal | undefined): Promise<void> {
   return new Promise((resolve, reject) => {
     throwIfAborted(signal);
-    const timeoutId = setTimeout(resolve, ms);
+    const timeoutId = setTimeout(() => {
+      signal?.removeEventListener("abort", abortHandler);
+      resolve();
+    }, ms);
     const abortHandler = (): void => {
       clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", abortHandler);
       reject(new DOMException("Operation aborted", "AbortError"));
     };
 
