@@ -23,7 +23,9 @@ export async function retryWithBackoff<T>(task: () => Promise<T>, options: Retry
     }
   }
 
-  throw lastError instanceof Error ? lastError : new Error("Retry task failed");
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(lastError !== undefined ? `Retry task failed: ${formatUnknownError(lastError)}` : "Retry task failed");
 }
 
 export function getBackoffDelayMs(attempt: number, options: RetryOptions): number {
@@ -48,6 +50,19 @@ function delay(ms: number, signal: AbortSignal | undefined): Promise<void> {
 
     signal?.addEventListener("abort", abortHandler, { once: true });
   });
+}
+
+function formatUnknownError(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (typeof error === "number" || typeof error === "boolean" || typeof error === "bigint") {
+    return error.toString();
+  }
+
+  try {
+    return JSON.stringify(error) ?? "unknown";
+  } catch {
+    return "unknown";
+  }
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {

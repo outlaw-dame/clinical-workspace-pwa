@@ -1,4 +1,6 @@
+import { matchVerifiedEmbeddingArtifactFromCache } from "./embeddingArtifactCache";
 import { createEmbeddingDocumentPrompt, createEmbeddingQueryPrompt } from "./embeddingPromptPolicy";
+import { getEmbeddingGemma300mArtifactIntegrityPolicy } from "./embeddingGemmaArtifactPolicy";
 import { LocalEmbeddingProviderError, normalizeLocalEmbeddingProviderError } from "./embeddingProviderErrors";
 import { truncateEmbeddingGemmaVector } from "./embeddingGemmaVector";
 import type { LocalEmbeddingModelManifest } from "./embeddingManifest";
@@ -30,6 +32,7 @@ type LoadedModel = {
 let loadedModel: LoadedModel | undefined;
 let loadingModelPromise: Promise<LoadedModel> | undefined;
 let loadingManifestId: string | undefined;
+let verifiedArtifactFetchInstalled = false;
 
 self.addEventListener("message", (event: MessageEvent<LocalEmbeddingWorkerRequest>) => {
   void handleWorkerRequest(event.data);
@@ -105,6 +108,7 @@ async function loadModel(manifest: LocalEmbeddingModelManifest): Promise<LoadedM
 
 async function loadModelOnce(manifest: LocalEmbeddingModelManifest): Promise<LoadedModel> {
   try {
+    installVerifiedArtifactFetchBridge();
     const transformers = (await import("@huggingface/transformers")) as unknown as TransformersModule;
     const options = {
       revision: manifest.revision,
@@ -121,6 +125,25 @@ async function loadModelOnce(manifest: LocalEmbeddingModelManifest): Promise<Loa
     loadingManifestId = undefined;
     throw new LocalEmbeddingProviderError("model_load_failed", "EmbeddingGemma model failed to load");
   }
+}
+
+function installVerifiedArtifactFetchBridge(): void {
+  if (verifiedArtifactFetchInstalled) return;
+
+  const originalFetch = globalThis.fetch.bind(globalThis);
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const verifiedArtifact = await matchVerifiedEmbeddingArtifactFromCache(
+      input,
+      getEmbeddingGemma300mArtifactIntegrityPolicy()
+    );
+
+    if (verifiedArtifact !== undefined) {
+      return verifiedArtifact;
+    }
+
+    return originalFetch(input, init);
+  };
+  verifiedArtifactFetchInstalled = true;
 }
 
 function extractSentenceEmbedding(sentenceEmbedding: TensorLike | undefined): number[] {

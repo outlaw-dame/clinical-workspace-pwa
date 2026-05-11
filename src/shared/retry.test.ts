@@ -58,6 +58,18 @@ describe("retryWithBackoff", () => {
     expect(task).toHaveBeenCalledTimes(1);
   });
 
+  it("preserves non-error failure context", async () => {
+    const task = vi.fn<() => Promise<string>>().mockRejectedValue("temporary string failure");
+
+    await expect(
+      retryWithBackoff(task, {
+        attempts: 1,
+        baseDelayMs: 100,
+        maxDelayMs: 100
+      })
+    ).rejects.toThrow("Retry task failed: temporary string failure");
+  });
+
   it("rejects promptly when aborted during delay", async () => {
     const controller = new AbortController();
     const task = vi.fn<() => Promise<string>>().mockRejectedValue(new Error("temporary"));
