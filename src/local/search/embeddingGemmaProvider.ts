@@ -38,23 +38,20 @@ export function resetEmbeddingGemmaArtifactVerificationForTests(): void {
 }
 
 async function ensureEmbeddingGemmaArtifactsVerified(signal: AbortSignal | undefined): Promise<void> {
-  if (signal !== undefined) {
-    await runArtifactVerification(signal);
-    return;
-  }
-
   artifactVerificationPromise ??= runArtifactVerification();
 
   try {
-    await artifactVerificationPromise;
+    await waitForVerificationWithCallerAbort(artifactVerificationPromise, signal);
   } catch (error) {
-    artifactVerificationPromise = undefined;
+    if (!isAbortError(error)) {
+      artifactVerificationPromise = undefined;
+    }
     throw error;
   }
 }
 
-async function runArtifactVerification(signal?: AbortSignal): Promise<void> {
-  const status = await ensureEmbeddingArtifactsVerified(getEmbeddingGemma300mArtifactIntegrityPolicy(), signal);
+async function runArtifactVerification(): Promise<void> {
+  const status = await ensureEmbeddingArtifactsVerified(getEmbeddingGemma300mArtifactIntegrityPolicy());
 
   if (status.state !== "verified") {
     throw new LocalEmbeddingProviderError(
@@ -62,4 +59,46 @@ async function runArtifactVerification(signal?: AbortSignal): Promise<void> {
       "EmbeddingGemma artifacts could not be verified"
     );
   }
+}
+
+async function waitForVerificationWithCallerAbort(
+  verificationPromise: Promise<void>,
+  signal: AbortSignal | undefined
+): Promise<void> {
+  if (signal === undefined) {
+    await verificationPromise;
+    return;
+  }
+
+  if (signal.aborted) {
+    throw createAbortError();
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const abortHandler = (): void => {
+      signal.removeEventListener("abort", abortHandler);
+      reject(createAbortError());
+    };
+
+    signal.addEventListener("abort", abortHandler, { once: true });
+
+    void verificationPromise.then(
+      () => {
+        signal.removeEventListener("abort", abortHandler);
+        resolve();
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", abortHandler);
+        reject(error);
+      }
+    );
+  });
+}
+
+function createAbortError(): DOMException {
+  return new DOMException("Operation aborted", "AbortError");
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
 }
