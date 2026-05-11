@@ -4,7 +4,6 @@ import {
   createArtifactUrl,
   ensureEmbeddingArtifactsVerified
 } from "./embeddingArtifactCache";
-import { LocalEmbeddingProviderError } from "./embeddingProviderErrors";
 import { embeddingGemma300mArtifactIntegrityPolicy } from "./embeddingGemmaArtifactPolicy";
 
 describe("createArtifactUrl", () => {
@@ -25,9 +24,11 @@ describe("canUseEmbeddingArtifactCache", () => {
 });
 
 describe("ensureEmbeddingArtifactsVerified", () => {
-  it("rejects with a provider error when browser artifact cache APIs are unavailable", async () => {
-    await expect(ensureEmbeddingArtifactsVerified(embeddingGemma300mArtifactIntegrityPolicy)).rejects.toMatchObject({
-      code: "unsupported_runtime"
-    } satisfies Partial<LocalEmbeddingProviderError>);
+  it("returns an unavailable status when browser artifact cache APIs are unavailable", async () => {
+    await expect(ensureEmbeddingArtifactsVerified(embeddingGemma300mArtifactIntegrityPolicy)).resolves.toMatchObject({
+      state: "unavailable",
+      verifiedCount: 0,
+      requiredCount: 4
+    });
   });
 });
