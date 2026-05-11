@@ -66,7 +66,17 @@ export async function matchVerifiedEmbeddingArtifactFromCache(
 
   const requestUrl = normalizeArtifactUrl(input);
   const artifact = policy.artifacts.find((candidate) => createArtifactUrl(policy, candidate) === requestUrl);
-  if (artifact === undefined) return undefined;
+
+  if (artifact === undefined) {
+    if (isPinnedModelRevisionUrl(requestUrl, policy)) {
+      throw new LocalEmbeddingProviderError(
+        "artifact_verification_failed",
+        "EmbeddingGemma requested an unpinned model artifact"
+      );
+    }
+
+    return undefined;
+  }
 
   const cache = await globalThis.caches.open(EMBEDDING_ARTIFACT_CACHE_NAME);
   const cachedResponse = await cache.match(requestUrl);
@@ -100,6 +110,11 @@ export function canUseEmbeddingArtifactCache(): boolean {
 
 export function createArtifactUrl(policy: LocalEmbeddingArtifactIntegrityPolicy, artifact: LocalEmbeddingArtifactIntegrity): string {
   return `${HUGGING_FACE_RESOLVE_BASE_URL}/${policy.modelId}/resolve/${policy.revision}/${artifact.path}`;
+}
+
+export function isPinnedModelRevisionUrl(requestUrl: string, policy: LocalEmbeddingArtifactIntegrityPolicy): boolean {
+  const expectedPrefix = `${HUGGING_FACE_RESOLVE_BASE_URL}/${policy.modelId}/resolve/${policy.revision}/`;
+  return requestUrl.startsWith(expectedPrefix);
 }
 
 async function ensureArtifactVerified(
