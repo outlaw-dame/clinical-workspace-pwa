@@ -1,4 +1,4 @@
-import { retryWithBackoff } from "../../shared/retry";
+import { retryWithBackoff, type RetryOptions } from "../../shared/retry";
 import type {
   LocalEmbeddingArtifactIntegrity,
   LocalEmbeddingArtifactIntegrityPolicy
@@ -90,11 +90,7 @@ async function ensureArtifactVerified(
 
   await retryWithBackoff(
     async () => {
-      const response = await fetch(url, {
-        cache: "reload",
-        credentials: "omit",
-        signal
-      });
+      const response = await fetch(url, createArtifactFetchInit(signal));
 
       if (!response.ok) {
         throw new LocalEmbeddingProviderError("artifact_verification_failed", "Embedding artifact download failed");
@@ -106,14 +102,7 @@ async function ensureArtifactVerified(
 
       await cache.put(url, response);
     },
-    {
-      attempts: 3,
-      baseDelayMs: 500,
-      maxDelayMs: 4_000,
-      jitterRatio: 0.3,
-      signal,
-      shouldRetry: (error) => !isAbortError(error)
-    }
+    createArtifactRetryOptions(signal)
   );
 }
 
@@ -121,6 +110,35 @@ async function responseMatchesExpectedHash(response: Response, expectedSha256: s
   const buffer = await response.arrayBuffer();
   const digest = await globalThis.crypto.subtle.digest("SHA-256", buffer);
   return toLowercaseHex(digest) === expectedSha256;
+}
+
+function createArtifactFetchInit(signal: AbortSignal | undefined): RequestInit {
+  const init: RequestInit = {
+    cache: "reload",
+    credentials: "omit"
+  };
+
+  if (signal !== undefined) {
+    init.signal = signal;
+  }
+
+  return init;
+}
+
+function createArtifactRetryOptions(signal: AbortSignal | undefined): RetryOptions {
+  const options: RetryOptions = {
+    attempts: 3,
+    baseDelayMs: 500,
+    maxDelayMs: 4_000,
+    jitterRatio: 0.3,
+    shouldRetry: (error) => !isAbortError(error)
+  };
+
+  if (signal !== undefined) {
+    options.signal = signal;
+  }
+
+  return options;
 }
 
 function toLowercaseHex(buffer: ArrayBuffer): string {
