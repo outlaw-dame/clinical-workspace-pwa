@@ -59,7 +59,12 @@ export async function ensureEmbeddingArtifactsVerified(
 }
 
 export function canUseEmbeddingArtifactCache(): boolean {
-  return typeof caches !== "undefined" && typeof fetch !== "undefined" && typeof crypto?.subtle !== "undefined";
+  return (
+    "caches" in globalThis &&
+    "fetch" in globalThis &&
+    "crypto" in globalThis &&
+    typeof globalThis.crypto.subtle?.digest === "function"
+  );
 }
 
 export function createArtifactUrl(policy: LocalEmbeddingArtifactIntegrityPolicy, artifact: LocalEmbeddingArtifactIntegrity): string {
@@ -71,7 +76,7 @@ async function ensureArtifactVerified(
   artifact: LocalEmbeddingArtifactIntegrity,
   signal: AbortSignal | undefined
 ): Promise<void> {
-  const cache = await caches.open(EMBEDDING_ARTIFACT_CACHE_NAME);
+  const cache = await globalThis.caches.open(EMBEDDING_ARTIFACT_CACHE_NAME);
   const url = createArtifactUrl(policy, artifact);
   const cachedResponse = await cache.match(url);
 
@@ -114,7 +119,7 @@ async function ensureArtifactVerified(
 
 async function responseMatchesExpectedHash(response: Response, expectedSha256: string): Promise<boolean> {
   const buffer = await response.arrayBuffer();
-  const digest = await crypto.subtle.digest("SHA-256", buffer);
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", buffer);
   return toLowercaseHex(digest) === expectedSha256;
 }
 
