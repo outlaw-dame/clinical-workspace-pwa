@@ -58,6 +58,37 @@ export async function ensureEmbeddingArtifactsVerified(
   };
 }
 
+export async function matchVerifiedEmbeddingArtifactFromCache(
+  input: RequestInfo | URL,
+  policy: LocalEmbeddingArtifactIntegrityPolicy
+): Promise<Response | undefined> {
+  if (!canUseEmbeddingArtifactCache()) return undefined;
+
+  const requestUrl = normalizeArtifactUrl(input);
+  const artifact = policy.artifacts.find((candidate) => createArtifactUrl(policy, candidate) === requestUrl);
+  if (artifact === undefined) return undefined;
+
+  const cache = await globalThis.caches.open(EMBEDDING_ARTIFACT_CACHE_NAME);
+  const cachedResponse = await cache.match(requestUrl);
+
+  if (cachedResponse === undefined) {
+    throw new LocalEmbeddingProviderError(
+      "artifact_verification_failed",
+      "Verified embedding artifact was missing from cache"
+    );
+  }
+
+  if (!(await responseMatchesExpectedHash(cachedResponse.clone(), artifact.sha256))) {
+    await cache.delete(requestUrl);
+    throw new LocalEmbeddingProviderError(
+      "artifact_verification_failed",
+      "Verified embedding artifact cache entry failed integrity check"
+    );
+  }
+
+  return cachedResponse;
+}
+
 export function canUseEmbeddingArtifactCache(): boolean {
   return (
     "caches" in globalThis &&
@@ -139,6 +170,12 @@ function createArtifactRetryOptions(signal: AbortSignal | undefined): RetryOptio
   }
 
   return options;
+}
+
+function normalizeArtifactUrl(input: RequestInfo | URL): string {
+  if (typeof input === "string") return new URL(input, globalThis.location?.origin).href;
+  if (input instanceof URL) return input.href;
+  return input.url;
 }
 
 function toLowercaseHex(buffer: ArrayBuffer): string {
