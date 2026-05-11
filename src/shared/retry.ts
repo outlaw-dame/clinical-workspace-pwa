@@ -23,7 +23,9 @@ export async function retryWithBackoff<T>(task: () => Promise<T>, options: Retry
     }
   }
 
-  throw lastError instanceof Error ? lastError : new Error("Retry task failed");
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(lastError !== undefined ? `Retry task failed: ${String(lastError)}` : "Retry task failed");
 }
 
 export function getBackoffDelayMs(attempt: number, options: RetryOptions): number {
