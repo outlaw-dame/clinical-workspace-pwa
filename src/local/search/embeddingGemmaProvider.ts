@@ -100,10 +100,13 @@ function normalizeArtifactVerificationRejection(error: unknown): Error {
   return new LocalEmbeddingProviderError("artifact_verification_failed", "EmbeddingGemma artifact verification failed");
 }
 
-function createAbortError(): DOMException {
-  return new DOMException("Operation aborted", "AbortError");
+function createAbortError(): LocalEmbeddingProviderError {
+  return new LocalEmbeddingProviderError("aborted", "EmbeddingGemma artifact verification was aborted");
 }
 
 function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError";
+  return (
+    error instanceof DOMException && error.name === "AbortError" ||
+    error instanceof LocalEmbeddingProviderError && error.code === "aborted"
+  );
 }
