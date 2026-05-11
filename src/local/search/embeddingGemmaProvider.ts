@@ -1,3 +1,5 @@
+import { ensureEmbeddingArtifactsVerified } from "./embeddingArtifactCache";
+import { getEmbeddingGemma300mArtifactIntegrityPolicy } from "./embeddingGemmaArtifactPolicy";
 import { createEmbeddingWithProvider, type LocalEmbeddingInput, type LocalEmbeddingProvider } from "./embeddingProvider";
 import { LocalEmbeddingProviderError } from "./embeddingProviderErrors";
 import { canUseLocalTransformerWorkerRuntime } from "./embeddingRuntimeCapabilities";
@@ -5,12 +7,14 @@ import { createEmbeddingGemmaWorkerEmbedding } from "./embeddingGemmaWorkerClien
 import { assertValidLocalEmbeddingManifest } from "./embeddingManifestValidation";
 import { embeddingGemma300mCandidateManifest } from "./localEmbeddingManifests";
 
+let artifactVerificationPromise: Promise<void> | undefined;
+
 export const embeddingGemmaLocalEmbeddingProvider: LocalEmbeddingProvider = {
   id: embeddingGemma300mCandidateManifest.id,
   displayName: embeddingGemma300mCandidateManifest.displayName,
   dimensions: embeddingGemma300mCandidateManifest.dimensions,
   privacyBoundary: "local-only",
-  createEmbedding: ({ text, purpose, signal }: LocalEmbeddingInput) => {
+  createEmbedding: async ({ text, purpose, signal }: LocalEmbeddingInput) => {
     assertValidLocalEmbeddingManifest(embeddingGemma300mCandidateManifest);
 
     if (!canUseLocalTransformerWorkerRuntime()) {
@@ -20,10 +24,31 @@ export const embeddingGemmaLocalEmbeddingProvider: LocalEmbeddingProvider = {
       );
     }
 
+    await ensureEmbeddingGemmaArtifactsVerified(signal);
     return createEmbeddingGemmaWorkerEmbedding(embeddingGemma300mCandidateManifest, text, purpose, signal);
   }
 };
 
 export async function createEmbeddingGemmaEmbedding(input: LocalEmbeddingInput): Promise<number[]> {
   return createEmbeddingWithProvider(embeddingGemmaLocalEmbeddingProvider, input);
+}
+
+export function resetEmbeddingGemmaArtifactVerificationForTests(): void {
+  artifactVerificationPromise = undefined;
+}
+
+async function ensureEmbeddingGemmaArtifactsVerified(signal: AbortSignal | undefined): Promise<void> {
+  artifactVerificationPromise ??= ensureEmbeddingArtifactsVerified(
+    getEmbeddingGemma300mArtifactIntegrityPolicy(),
+    signal
+  ).then((status) => {
+    if (status.state !== "verified") {
+      throw new LocalEmbeddingProviderError(
+        "artifact_verification_failed",
+        "EmbeddingGemma artifacts could not be verified"
+      );
+    }
+  });
+
+  return artifactVerificationPromise;
 }
