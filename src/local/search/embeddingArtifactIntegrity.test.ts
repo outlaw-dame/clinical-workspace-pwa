@@ -75,4 +75,19 @@ describe("assertValidArtifactIntegrityPolicy", () => {
       assertValidArtifactIntegrityPolicy({ ...embeddingGemma300mArtifactIntegrityPolicy, artifacts })
     ).toThrow("missing a required artifact role");
   });
+
+  it("rejects unsupported optional artifact roles", () => {
+    const [first] = embeddingGemma300mArtifactIntegrityPolicy.artifacts;
+    if (first === undefined) throw new Error("missing fixture artifact");
+    const optionalArtifacts = [
+      { path: `${first.path}.copy`, role: "tokenizer-json", reason: "fixture", required: true }
+    ] as const;
+
+    expect(() =>
+      assertValidArtifactIntegrityPolicy({
+        ...embeddingGemma300mArtifactIntegrityPolicy,
+        unpinnedArtifacts: optionalArtifacts
+      })
+    ).toThrow("unsupported unpinned artifact role");
+  });
 });
