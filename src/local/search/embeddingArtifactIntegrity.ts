@@ -99,6 +99,10 @@ function validateUnpinnedArtifacts(
       throw new LocalEmbeddingProviderError("invalid_manifest", "Embedding artifact policy includes incomplete unpinned artifact metadata");
     }
 
+    if (artifact.role !== "model-metadata" && artifact.role !== "tokenizer-metadata") {
+      throw new LocalEmbeddingProviderError("invalid_manifest", "Embedding artifact policy includes unsupported unpinned artifact role");
+    }
+
     if (pinnedPaths.has(artifact.path) || unpinnedPaths.has(artifact.path)) {
       throw new LocalEmbeddingProviderError("invalid_manifest", "Embedding artifact policy contains duplicate artifact paths");
     }
