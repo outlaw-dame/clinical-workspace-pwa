@@ -1,0 +1,149 @@
+# Next development path
+
+_Last updated: 2026-06-08_
+
+This is the recommended path to resume development cleanly from the current codebase without depending on old chat history.
+
+## Current working priority
+
+The safest next priority is not broad feature expansion. The immediate priority is to stabilize the local embedding/search foundation, keep the private-data boundary intact, and then add user-facing workspace records in small slices.
+
+## Non-goals for the next cycle
+
+Do not start these until the guardrails below are complete:
+
+- Production claims.
+- Production chat networking.
+- Production document collaboration.
+- Analytics/session replay.
+- Cloud sync of decrypted content.
+- Remote semantic search over decrypted notes.
+- Broad feature surfaces that bypass lock, audit, search, or encryption boundaries.
+
+## Ordered next steps
+
+### Step 1 — Finish implementation documentation recovery
+
+Deliverables:
+
+- `docs/implementation/current-state.md`.
+- `docs/implementation/security-boundaries.md`.
+- `docs/implementation/embedding-gemma-status.md`.
+- `docs/implementation/known-deviations.md`.
+- `docs/implementation/review-and-ci-log.md`.
+- README link to this documentation directory.
+
+Exit criteria:
+
+- Future work can start from repo docs rather than broken/truncated chats.
+- The docs distinguish implemented, scaffolded, pending PR, and not-complete work.
+
+### Step 2 — Resolve PR #20 / EmbeddingGemma manifest hardening
+
+Deliverables:
+
+- Merge PR #20 or intentionally replace it with an equivalent manifest-hardening PR.
+- Ensure unpinned artifacts are metadata-only.
+- Ensure duplicate pinned/unpinned paths fail validation.
+- Ensure CI is green after any docs/master drift is resolved.
+
+Exit criteria:
+
+- Runtime-critical artifacts cannot be unpinned.
+- The model manifest and artifact-integrity policy are documented and tested.
+
+### Step 3 — Reconcile README with implementation state
+
+Deliverables:
+
+- Update README EmbeddingGemma section so it matches the code after PR #16, PR #17, PR #18, PR #19, and PR #20 if merged.
+- Keep README concise and link to `docs/implementation/embedding-gemma-status.md` for details.
+
+Exit criteria:
+
+- README no longer says the provider is inactive if the code prefers EmbeddingGemma by default with fallback.
+- README does not duplicate all implementation details that now belong in docs.
+
+### Step 4 — Add runtime troubleshooting and QA notes
+
+Deliverables:
+
+- Browser/runtime support notes for local transformer worker path.
+- First-run model download/cache checklist.
+- Offline reload checklist.
+- Corrupted-cache recovery checklist.
+- Fallback-provider checklist.
+
+Exit criteria:
+
+- A developer can manually verify the local embedding path without reading old PR threads.
+
+### Step 5 — Add chat/outbox domain model slice, not full chat
+
+Deliverables:
+
+- Local chat message records.
+- Local optimistic-send state.
+- Sync outbox operation shape.
+- Idempotency key policy.
+- Exponential backoff/retry policy.
+- Tests for retry, duplicate send, stale response, and local rollback boundaries.
+
+Exit criteria:
+
+- The app has a safe local chat/outbox foundation without claiming production messaging.
+
+### Step 6 — Add encrypted document import slice
+
+Deliverables:
+
+- Import flow that encrypts before writing to OPFS.
+- No decrypted bytes written to durable browser storage.
+- Safe metadata model.
+- Audit events for import/open/delete attempts without storing sensitive content.
+- Tests for encrypted-only OPFS boundary.
+
+Exit criteria:
+
+- Documents can enter the local vault without weakening the encrypted-storage boundary.
+
+### Step 7 — Add task/calendar records as workspace primitives
+
+Deliverables:
+
+- Local task records.
+- Local calendar/event records.
+- Today view integration.
+- Search/audit integration if appropriate.
+- Tests for date/time validation and local persistence.
+
+Exit criteria:
+
+- Tasks and calendar fit the workspace surface without becoming a separate project-management module.
+
+### Step 8 — Expand audit coverage
+
+Deliverables:
+
+- Lock/unlock audit events.
+- Sensitive local-write audit events.
+- Document access audit events.
+- Sync attempt audit events.
+- Privacy-safe audit metadata policy tests.
+
+Exit criteria:
+
+- Audit coverage expands without storing decrypted content, raw query text, tokens, keys, or file contents.
+
+## Standard validation gate
+
+For code changes, run:
+
+```bash
+npm run typecheck
+npm run lint
+npm test
+npm run build
+```
+
+For docs-only changes, CI may still run the full repository gate. Do not skip code validation when docs and implementation change together.
