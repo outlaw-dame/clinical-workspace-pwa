@@ -4,6 +4,10 @@ A minimalist, Apple-like, local-first Progressive Web App foundation for a secur
 
 This repository started as an architecture specification and now includes an application scaffold with local security, encrypted notes, and local hybrid search foundations.
 
+## Implementation docs
+
+Start with [`docs/implementation/README.md`](docs/implementation/README.md) when old project chats are unavailable or when implementation direction is unclear. The implementation docs are the durable truth layer for current state, security boundaries, EmbeddingGemma status, known deviations, next development path, and review/CI recovery notes.
+
 ## Foundation goals
 
 - **Native-feeling PWA:** installable shell, safe-area aware layout, iPhone bottom tabs, larger-screen sidebar, reduced-motion support.
