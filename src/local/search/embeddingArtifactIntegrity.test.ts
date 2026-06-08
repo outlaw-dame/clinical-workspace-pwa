@@ -56,14 +56,14 @@ describe("assertValidArtifactIntegrityPolicy", () => {
     ).toThrow("model artifacts must declare a dtype");
   });
 
-  it("rejects dtype declarations on tokenizer artifacts", () => {
+  it("rejects dtype declarations on non-model artifacts", () => {
     const artifacts = embeddingGemma300mArtifactIntegrityPolicy.artifacts.map((artifact) =>
       artifact.role === "tokenizer-json" ? { ...artifact, dtype: "q4" as const } : artifact
     );
 
     expect(() =>
       assertValidArtifactIntegrityPolicy({ ...embeddingGemma300mArtifactIntegrityPolicy, artifacts })
-    ).toThrow("tokenizer artifacts must not declare a dtype");
+    ).toThrow("non-model artifacts must not declare a dtype");
   });
 
   it("requires all runtime-critical artifact roles", () => {
