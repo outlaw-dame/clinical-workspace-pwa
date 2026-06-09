@@ -73,22 +73,37 @@ Delivered:
 - Worker failure, timeout, abort, and fallback checklist.
 - Manual QA record template.
 
+### Step 5 — Chat/outbox domain foundation
+
+Status: initial local foundation complete, sync processing still pending.
+
+Delivered:
+
+- `chat_messages` local table.
+- Local chat message repository functions.
+- Encrypted local chat message payload storage.
+- Encrypted `sync_outbox` payload enqueue for `chat.message.send`.
+- Local optimistic delivery states: `queued`, `sending`, `sent`, and `failed`.
+- Stable chat message idempotency keys.
+- Bounded exponential retry scheduling helper.
+- Unit tests for draft sanitation, idempotency keys, and retry scheduling.
+- `docs/implementation/chat-outbox-status.md`.
+
 ## Ordered next steps
 
-### Step 5 — Add chat/outbox domain model slice, not full chat
+### Step 5b — Add outbox dequeue/claim and sender processing
 
 Deliverables:
 
-- Local chat message records.
-- Local optimistic-send state.
-- Sync outbox operation shape.
-- Idempotency key policy.
-- Exponential backoff/retry policy.
-- Tests for retry, duplicate send, stale response, and local rollback boundaries.
+- Due-operation query for `sync_outbox` records whose `next_attempt_at` is due.
+- Claim/update API that prevents duplicate in-process sends.
+- Injected sender boundary so tests can simulate success, retryable failure, and terminal failure.
+- Local chat delivery-state updates from outbox results.
+- Tests for duplicate idempotency handling, stale responses, retryable failures, terminal failures, and local rollback boundaries.
 
 Exit criteria:
 
-- The app has a safe local chat/outbox foundation without claiming production messaging.
+- Local chat messages can move from queued to sent/failed through a tested sync boundary without adding a production network dependency.
 
 ### Step 6 — Add encrypted document import slice
 
