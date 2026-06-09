@@ -33,7 +33,7 @@ type ChatMessageRow = {
   updated_at: string;
 };
 
-type ChatOutboxPayload = {
+export type ChatOutboxPayload = {
   schemaVersion: 1;
   messageId: string;
   conversationId: string;
@@ -46,14 +46,65 @@ export type SyncOutboxRetryPolicy = {
   jitterRatio: number;
 };
 
+export type SyncOutboxOperationSummary = {
+  id: string;
+  operationType: string;
+  entityType: string;
+  entityId: string;
+  idempotencyKey: string;
+  attemptCount: number;
+  nextAttemptAt: string | null;
+  createdAt: string;
+  lastError: string | null;
+  claimedAt: string | null;
+  lockedUntilAt: string | null;
+};
+
+export type ClaimedSyncOutboxOperation = SyncOutboxOperationSummary & {
+  claimToken: string;
+  payload: ChatOutboxPayload;
+};
+
+export type SyncOutboxSendResult =
+  | { status: "sent" }
+  | { status: "retry"; error: string }
+  | { status: "failed"; error: string };
+
+export type SyncOutboxSender = (operation: ClaimedSyncOutboxOperation) => Promise<SyncOutboxSendResult>;
+
+export type SyncOutboxProcessingResult =
+  | { status: "idle" }
+  | { status: "sent"; operationId: string; messageId: string }
+  | { status: "retry_scheduled"; operationId: string; messageId: string; nextAttemptAt: string }
+  | { status: "failed"; operationId: string; messageId: string };
+
+type SyncOutboxOperationRow = {
+  id: string;
+  operation_type: string;
+  entity_type: string;
+  entity_id: string;
+  payload_ciphertext: string;
+  idempotency_key: string;
+  attempt_count: number;
+  next_attempt_at: string | null;
+  created_at: string;
+  last_error: string | null;
+  claim_token: string | null;
+  claimed_at: string | null;
+  locked_until_at: string | null;
+};
+
 export const DEFAULT_SYNC_OUTBOX_RETRY_POLICY: SyncOutboxRetryPolicy = {
   baseDelayMs: 1_000,
   maxDelayMs: 5 * 60_000,
   jitterRatio: 0.2
 };
 
+export const DEFAULT_SYNC_OUTBOX_CLAIM_TTL_MS = 30_000;
+
 const MAX_CONVERSATION_ID_LENGTH = 200;
 const MAX_CHAT_BODY_LENGTH = 10_000;
+const MAX_OUTBOX_BATCH_SIZE = 50;
 
 export async function createLocalChatMessage(draft: LocalChatMessageDraft): Promise<LocalChatMessage> {
   const conversationId = normalizeConversationId(draft.conversationId);
@@ -123,6 +174,83 @@ export async function listLocalChatMessages(conversationId: string): Promise<Loc
   return Promise.all(result.rows.map(decryptChatMessageRow));
 }
 
+export async function listDueSyncOutboxOperations(
+  limit = 10,
+  now = new Date()
+): Promise<SyncOutboxOperationSummary[]> {
+  const db = await getLocalDb();
+  const nowIso = now.toISOString();
+  const result = await db.query<SyncOutboxOperationRow>(
+    `${createSyncOutboxSelectSql()}
+     WHERE completed_at IS NULL
+       AND (next_attempt_at IS NULL OR next_attempt_at <= $1)
+       AND (locked_until_at IS NULL OR locked_until_at <= $1)
+     ORDER BY next_attempt_at ASC NULLS FIRST, created_at ASC, id ASC
+     LIMIT $2`,
+    [nowIso, normalizeOutboxLimit(limit)]
+  );
+
+  return result.rows.map(rowToSyncOutboxOperationSummary);
+}
+
+export async function claimNextDueSyncOutboxOperation(
+  now = new Date(),
+  claimTtlMs = DEFAULT_SYNC_OUTBOX_CLAIM_TTL_MS
+): Promise<ClaimedSyncOutboxOperation | undefined> {
+  const dueOperations = await listDueSyncOutboxOperations(MAX_OUTBOX_BATCH_SIZE, now);
+
+  for (const operation of dueOperations) {
+    const claimed = await claimSyncOutboxOperation(operation.id, now, claimTtlMs);
+    if (claimed !== undefined) return claimed;
+  }
+
+  return undefined;
+}
+
+export async function processNextDueSyncOutboxOperation(
+  sender: SyncOutboxSender,
+  now = new Date()
+): Promise<SyncOutboxProcessingResult> {
+  const operation = await claimNextDueSyncOutboxOperation(now);
+  if (operation === undefined) return { status: "idle" };
+
+  await markLocalChatMessageSending(operation.entityId);
+
+  try {
+    const result = await sender(operation);
+
+    if (result.status === "sent") {
+      await completeClaimedSyncOutboxOperation(operation, now);
+      await markLocalChatMessageSent(operation.entityId);
+      return { status: "sent", operationId: operation.id, messageId: operation.entityId };
+    }
+
+    if (result.status === "failed") {
+      await failClaimedSyncOutboxOperation(operation, result.error, now);
+      await markLocalChatMessageFailed(operation.entityId);
+      return { status: "failed", operationId: operation.id, messageId: operation.entityId };
+    }
+
+    const nextAttemptAt = await releaseClaimedSyncOutboxOperationForRetry(operation, result.error, now);
+    await updateLocalChatMessageDeliveryState(operation.entityId, "queued");
+    return {
+      status: "retry_scheduled",
+      operationId: operation.id,
+      messageId: operation.entityId,
+      nextAttemptAt
+    };
+  } catch (error) {
+    const nextAttemptAt = await releaseClaimedSyncOutboxOperationForRetry(operation, formatUnknownError(error), now);
+    await updateLocalChatMessageDeliveryState(operation.entityId, "queued");
+    return {
+      status: "retry_scheduled",
+      operationId: operation.id,
+      messageId: operation.entityId,
+      nextAttemptAt
+    };
+  }
+}
+
 export async function markLocalChatMessageSending(messageId: string): Promise<void> {
   await updateLocalChatMessageDeliveryState(messageId, "sending");
 }
@@ -145,8 +273,13 @@ export async function scheduleSyncOutboxRetry(
   const nextAttemptAt = getSyncOutboxNextAttemptAt(attemptCount, now);
   await db.query(
     `UPDATE sync_outbox
-     SET attempt_count = $1, next_attempt_at = $2, last_error = $3
-     WHERE id = $4`,
+     SET attempt_count = $1,
+         next_attempt_at = $2,
+         last_error = $3,
+         claim_token = NULL,
+         claimed_at = NULL,
+         locked_until_at = NULL
+     WHERE id = $4 AND completed_at IS NULL`,
     [attemptCount, nextAttemptAt, sanitizeOutboxError(lastError), outboxId]
   );
 }
@@ -176,11 +309,106 @@ export function getSyncOutboxRetryDelayMs(
   return Math.round(Math.min(policy.maxDelayMs, baseDelay + jitter));
 }
 
+export function getSyncOutboxLockedUntilAt(now = new Date(), claimTtlMs = DEFAULT_SYNC_OUTBOX_CLAIM_TTL_MS): string {
+  return new Date(now.getTime() + Math.max(1, Math.floor(claimTtlMs))).toISOString();
+}
+
 export function sanitizeChatMessageDraft(draft: LocalChatMessageDraft): LocalChatMessageDraft {
   return {
     conversationId: normalizeConversationId(draft.conversationId),
     body: sanitizeChatMessagePayload(draft.body).body
   };
+}
+
+async function claimSyncOutboxOperation(
+  operationId: string,
+  now: Date,
+  claimTtlMs: number
+): Promise<ClaimedSyncOutboxOperation | undefined> {
+  const db = await getLocalDb();
+  const nowIso = now.toISOString();
+  const claimToken = crypto.randomUUID();
+  const lockedUntilAt = getSyncOutboxLockedUntilAt(now, claimTtlMs);
+  const result = await db.query<SyncOutboxOperationRow>(
+    `UPDATE sync_outbox
+     SET claim_token = $1, claimed_at = $2, locked_until_at = $3
+     WHERE id = $4
+       AND completed_at IS NULL
+       AND (next_attempt_at IS NULL OR next_attempt_at <= $2)
+       AND (locked_until_at IS NULL OR locked_until_at <= $2)
+     RETURNING id, operation_type, entity_type, entity_id, payload_ciphertext,
+       idempotency_key, attempt_count, next_attempt_at, created_at, last_error,
+       claim_token, claimed_at, locked_until_at`,
+    [claimToken, nowIso, lockedUntilAt, operationId]
+  );
+  const row = result.rows[0];
+  return row === undefined ? undefined : hydrateClaimedSyncOutboxOperation(row);
+}
+
+async function hydrateClaimedSyncOutboxOperation(row: SyncOutboxOperationRow): Promise<ClaimedSyncOutboxOperation> {
+  if (row.claim_token === null) {
+    throw new Error("Claimed sync outbox operation is missing claim token");
+  }
+
+  return {
+    ...rowToSyncOutboxOperationSummary(row),
+    claimToken: row.claim_token,
+    payload: await decryptChatOutboxPayload(row.payload_ciphertext)
+  };
+}
+
+async function completeClaimedSyncOutboxOperation(operation: ClaimedSyncOutboxOperation, now: Date): Promise<void> {
+  const db = await getLocalDb();
+  await db.query(
+    `UPDATE sync_outbox
+     SET completed_at = $1,
+         last_error = NULL,
+         claim_token = NULL,
+         claimed_at = NULL,
+         locked_until_at = NULL
+     WHERE id = $2 AND claim_token = $3 AND completed_at IS NULL`,
+    [now.toISOString(), operation.id, operation.claimToken]
+  );
+}
+
+async function failClaimedSyncOutboxOperation(
+  operation: ClaimedSyncOutboxOperation,
+  error: string,
+  now: Date
+): Promise<void> {
+  const db = await getLocalDb();
+  await db.query(
+    `UPDATE sync_outbox
+     SET completed_at = $1,
+         last_error = $2,
+         claim_token = NULL,
+         claimed_at = NULL,
+         locked_until_at = NULL
+     WHERE id = $3 AND claim_token = $4 AND completed_at IS NULL`,
+    [now.toISOString(), sanitizeOutboxError(error), operation.id, operation.claimToken]
+  );
+}
+
+async function releaseClaimedSyncOutboxOperationForRetry(
+  operation: ClaimedSyncOutboxOperation,
+  error: string,
+  now: Date
+): Promise<string> {
+  const db = await getLocalDb();
+  const nextAttemptCount = operation.attemptCount + 1;
+  const nextAttemptAt = getSyncOutboxNextAttemptAt(nextAttemptCount, now);
+  await db.query(
+    `UPDATE sync_outbox
+     SET attempt_count = $1,
+         next_attempt_at = $2,
+         last_error = $3,
+         claim_token = NULL,
+         claimed_at = NULL,
+         locked_until_at = NULL
+     WHERE id = $4 AND claim_token = $5 AND completed_at IS NULL`,
+    [nextAttemptCount, nextAttemptAt, sanitizeOutboxError(error), operation.id, operation.claimToken]
+  );
+  return nextAttemptAt;
 }
 
 function createChatOutboxPayload(
@@ -194,6 +422,12 @@ function createChatOutboxPayload(
     conversationId,
     encryptedMessagePayload
   };
+}
+
+async function decryptChatOutboxPayload(encryptedPayloadJson: string): Promise<ChatOutboxPayload> {
+  const encryptedPayload = parseEncryptedPayload(encryptedPayloadJson);
+  const plaintext = await decryptInCryptoWorker(encryptedPayload);
+  return parseChatOutboxPayload(plaintext);
 }
 
 function sanitizeChatMessagePayload(body: string): ChatMessagePayload {
@@ -255,7 +489,7 @@ function parseEncryptedPayload(value: string): EncryptedPayload {
   const parsed: unknown = JSON.parse(value);
 
   if (!isEncryptedPayload(parsed)) {
-    throw new Error("Stored chat message payload is malformed");
+    throw new Error("Stored encrypted payload is malformed");
   }
 
   return parsed;
@@ -266,6 +500,16 @@ function parseChatMessagePayload(value: string): ChatMessagePayload {
 
   if (!isChatMessagePayload(parsed)) {
     throw new Error("Decrypted chat message payload is malformed");
+  }
+
+  return parsed;
+}
+
+function parseChatOutboxPayload(value: string): ChatOutboxPayload {
+  const parsed: unknown = JSON.parse(value);
+
+  if (!isChatOutboxPayload(parsed)) {
+    throw new Error("Decrypted chat outbox payload is malformed");
   }
 
   return parsed;
@@ -283,11 +527,46 @@ async function updateLocalChatMessageDeliveryState(
   ]);
 }
 
+function rowToSyncOutboxOperationSummary(row: SyncOutboxOperationRow): SyncOutboxOperationSummary {
+  return {
+    id: row.id,
+    operationType: row.operation_type,
+    entityType: row.entity_type,
+    entityId: row.entity_id,
+    idempotencyKey: row.idempotency_key,
+    attemptCount: row.attempt_count,
+    nextAttemptAt: row.next_attempt_at,
+    createdAt: row.created_at,
+    lastError: row.last_error,
+    claimedAt: row.claimed_at,
+    lockedUntilAt: row.locked_until_at
+  };
+}
+
+function createSyncOutboxSelectSql(): string {
+  return `SELECT id, operation_type, entity_type, entity_id, payload_ciphertext,
+       idempotency_key, attempt_count, next_attempt_at, created_at, last_error,
+       claim_token, claimed_at, locked_until_at
+     FROM sync_outbox`;
+}
+
+function normalizeOutboxLimit(limit: number): number {
+  if (!Number.isFinite(limit)) return 10;
+  return Math.min(MAX_OUTBOX_BATCH_SIZE, Math.max(1, Math.floor(limit)));
+}
+
 function sanitizeOutboxError(value: string): string {
   return replaceUnsafeControlCharacters(value)
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 500);
+}
+
+function formatUnknownError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (typeof error === "number" || typeof error === "boolean" || typeof error === "bigint") return error.toString();
+  return "Unknown sync outbox sender error";
 }
 
 function isEncryptedPayload(value: unknown): value is EncryptedPayload {
@@ -311,6 +590,21 @@ function isChatMessagePayload(value: unknown): value is ChatMessagePayload {
     "body" in value &&
     value.schemaVersion === 1 &&
     typeof value.body === "string"
+  );
+}
+
+function isChatOutboxPayload(value: unknown): value is ChatOutboxPayload {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "schemaVersion" in value &&
+    "messageId" in value &&
+    "conversationId" in value &&
+    "encryptedMessagePayload" in value &&
+    value.schemaVersion === 1 &&
+    typeof value.messageId === "string" &&
+    typeof value.conversationId === "string" &&
+    isEncryptedPayload(value.encryptedMessagePayload)
   );
 }
 
