@@ -75,7 +75,7 @@ Delivered:
 
 ### Step 5 — Chat/outbox domain foundation
 
-Status: local foundation, injected sender processing, audit hooks, and duplicate-safe scheduler wrapper are implemented; production transport is still out of scope.
+Status: local foundation, injected sender processing, audit hooks, duplicate-safe scheduler wrapper, and focused edge-case helpers/tests are implemented; production transport is still out of scope.
 
 Delivered:
 
@@ -92,22 +92,15 @@ Delivered:
 - Duplicate-safe scheduler wrapper that reuses an in-flight run.
 - Privacy-safe audit events around enqueue, claim, send success, retry scheduling, and terminal failure.
 - Local chat delivery-state updates from outbox processing results.
-- Unit tests for draft sanitation, idempotency keys, retry scheduling, claim lease timing, idle processing, sent processing, retry scheduling, failed processing, thrown sender errors, audit metadata, and duplicate-safe scheduler behavior.
+- Focused helper coverage for duplicate client message lookup and stale claim responses.
+- Unit tests for draft sanitation, idempotency keys, retry scheduling, claim lease timing, idle processing, sent processing, retry scheduling, failed processing, thrown sender errors, audit metadata, duplicate-safe scheduler behavior, duplicate client message lookup, and stale claim responses.
 - `docs/implementation/chat-outbox-status.md`.
 
+Known follow-up:
+
+- Stale-claim-aware helper functions are covered, but `processNextDueSyncOutboxOperation` still needs a small integration pass so sent/retry/failed paths return explicit stale-claim results when the claimed row was already completed or released. The direct large-file refactor was blocked by the connector safety gate.
+
 ## Ordered next steps
-
-### Step 5d — Complete chat outbox edge-case hardening
-
-Deliverables:
-
-- Tests for duplicate idempotency handling.
-- Tests for stale claim responses where a completion/retry update affects no active claimed row.
-- A follow-up decision on whether those stale-claim cases should return an explicit result instead of relying on row-count support from PGlite.
-
-Exit criteria:
-
-- The local chat outbox boundary has explicit coverage for the remaining race conditions before Chat UI wiring.
 
 ### Step 6 — Add encrypted document import slice
 
