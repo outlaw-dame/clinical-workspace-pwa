@@ -75,7 +75,7 @@ Delivered:
 
 ### Step 5 — Chat/outbox domain foundation
 
-Status: local foundation and injected sender processing are implemented; production transport is still out of scope.
+Status: local foundation, injected sender processing, audit hooks, and duplicate-safe scheduler wrapper are implemented; production transport is still out of scope.
 
 Delivered:
 
@@ -89,24 +89,25 @@ Delivered:
 - Sync outbox claim/lease columns and due-operation listing.
 - Claim API for one due operation at a time.
 - Injected sender processing boundary for sent, retry, failed, and thrown-error outcomes.
+- Duplicate-safe scheduler wrapper that reuses an in-flight run.
+- Privacy-safe audit events around enqueue, claim, send success, retry scheduling, and terminal failure.
 - Local chat delivery-state updates from outbox processing results.
-- Unit tests for draft sanitation, idempotency keys, retry scheduling, claim lease timing, idle processing, sent processing, retry scheduling, and failed processing.
+- Unit tests for draft sanitation, idempotency keys, retry scheduling, claim lease timing, idle processing, sent processing, retry scheduling, failed processing, thrown sender errors, audit metadata, and duplicate-safe scheduler behavior.
 - `docs/implementation/chat-outbox-status.md`.
 
 ## Ordered next steps
 
-### Step 5c — Add chat outbox audit and scheduler hardening
+### Step 5d — Complete chat outbox edge-case hardening
 
 Deliverables:
 
-- Tests for duplicate idempotency handling and stale claim responses.
-- Privacy-safe audit events around local chat enqueue, outbox retry, send success, and send failure.
-- Background-safe scheduler loop that calls the injected sender boundary without creating duplicate in-process sends.
-- Documentation update with scheduler limitations and non-production transport boundary.
+- Tests for duplicate idempotency handling.
+- Tests for stale claim responses where a completion/retry update affects no active claimed row.
+- A follow-up decision on whether those stale-claim cases should return an explicit result instead of relying on row-count support from PGlite.
 
 Exit criteria:
 
-- Local chat outbox processing has audit coverage and a scheduler wrapper while still avoiding production network claims.
+- The local chat outbox boundary has explicit coverage for the remaining race conditions before Chat UI wiring.
 
 ### Step 6 — Add encrypted document import slice
 
