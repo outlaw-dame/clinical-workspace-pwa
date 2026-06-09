@@ -33,6 +33,7 @@ Implemented on `master`:
 - Metadata-only unpinned artifact roles.
 - Rejection of unsupported unpinned roles.
 - Regression coverage for unsupported unpinned roles.
+- Runtime troubleshooting and manual QA guide in `docs/implementation/embedding-gemma-runtime-qa.md`.
 
 ## PR #20 status
 
@@ -59,8 +60,7 @@ The reviewed PR head was `cf94cc48a20fd185c7fb00c162659d0437941820`; CI was gree
 
 ## Remaining work
 
-1. Add a short troubleshooting note for unsupported browser/runtime/cache cases.
-2. Add manual QA notes for first-run model download/cache, offline reload, cache corruption, and fallback behavior.
-3. Confirm whether each intentionally unpinned metadata file is non-critical and keep the rationale documented.
-4. Keep artifact-policy tests aligned with every artifact role introduced by model-manifest changes.
-5. Add browser-level/e2e coverage for worker startup and fallback behavior when the test harness is ready.
+1. Execute and record manual QA results for first-run model download/cache, offline reload, cache corruption, and fallback behavior.
+2. Confirm whether each intentionally unpinned metadata file is non-critical and keep the rationale documented.
+3. Keep artifact-policy tests aligned with every artifact role introduced by model-manifest changes.
+4. Add browser-level/e2e coverage for worker startup and fallback behavior when the test harness is ready.
