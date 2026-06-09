@@ -80,21 +80,21 @@ Local semantic search uses an explicit embedding-provider boundary:
 - providers must declare their model ID, dimensions, and local-only privacy boundary;
 - embedding generation supports cancellation and dimension validation;
 - indexed chunks store the provider model ID so future model changes can trigger safe reindexing;
-- the deterministic token-hash provider is a local fallback and test scaffold, not the final clinical semantic model;
-- real model work must use the embedding runtime scaffold: manifest validation, runtime capability checks, worker request/response contracts, and privacy-safe provider errors.
+- the deterministic token-hash provider remains a local fallback and test scaffold, not the final clinical semantic model;
+- real model work must use the embedding runtime scaffold: manifest validation, runtime capability checks, worker request/response contracts, verified artifact loading, and privacy-safe provider errors.
 
-EmbeddingGemma 300M is the preferred candidate model, but it is not active yet:
+EmbeddingGemma 300M is now the preferred local semantic embedding provider when the browser runtime supports the local transformer worker path. The deterministic provider remains the session fallback for unsupported runtimes, model load failures, artifact verification failures, and non-abort provider errors.
 
-- active provider remains the deterministic fallback;
-- candidate runtime is `local-transformer-worker`;
-- candidate package target is `onnx-community/embeddinggemma-300m-ONNX`;
+- runtime is `local-transformer-worker`;
+- package target is `onnx-community/embeddinggemma-300m-ONNX`;
 - base model reference is `google/embeddinggemma-300m`;
 - selected index dimensions are 256 from a 768-dimensional base embedding;
 - supported dimensions are 768, 512, 256, and 128;
 - default dtype is `q4`, with `q8` and `fp32` fallbacks;
 - prompt policy is centralized for query and document embedding inputs;
-- ONNX revision is pinned to the candidate manifest before runtime activation;
-- artifact integrity policy requires the q4 ONNX graph, q4 external data, tokenizer JSON, and tokenizer model with SHA-256 digests.
+- ONNX revision is pinned by manifest/policy metadata;
+- runtime-critical graph/data/tokenizer artifacts require SHA-256 integrity metadata;
+- unpinned artifacts are restricted to non-critical model/tokenizer metadata roles.
 
 The current passkey flow proves a local browser authenticator ceremony and gates the local workspace. Production sync/session trust still requires server-issued WebAuthn challenges and server-side signature verification.
 
@@ -107,7 +107,8 @@ The current passkey flow proves a local browser authenticator ceremony and gates
 - Encrypted secure notes
 - Local hybrid search over secure notes
 - Local embedding-provider boundary with deterministic fallback provider
-- Local embedding runtime scaffold with EmbeddingGemma candidate manifest and artifact integrity policy
+- Worker-backed EmbeddingGemma provider path with deterministic session fallback
+- EmbeddingGemma manifest, artifact integrity policy, and verified artifact cache hardening
 - Injectable local search repository boundary
 - Privacy-safe audit-event writes with serialized hash-chain updates
 - Background/batched search-index repair
@@ -117,14 +118,11 @@ The current passkey flow proves a local browser authenticator ceremony and gates
 
 ## Next implementation phase
 
-1. Add the local transformer worker package and worker-backed provider without activating it by default.
-2. Add artifact download/cache verification against the pinned EmbeddingGemma integrity policy.
-3. Add 768-to-256 truncation, re-normalization, and result dimension validation.
-4. Add reindex planning for the future 256-dimensional EmbeddingGemma index while preserving the 64-dimensional fallback index.
-5. Add chat message model, local optimistic send, and sync outbox operations with exponential backoff and idempotency.
-6. Add document import flow that encrypts before writing to OPFS.
-7. Add task and calendar records that fit the Today/Chat/Notes/Calendar surfaces rather than becoming a separate project-management module.
-8. Expand audit coverage around lock/unlock, document access, local writes, and sync attempts without storing PHI in logs.
+1. Add runtime troubleshooting and manual QA notes for the local transformer worker path, first-run model download/cache, offline reload, corrupted-cache recovery, and deterministic fallback behavior.
+2. Add chat message model, local optimistic send, and sync outbox operations with exponential backoff and idempotency.
+3. Add document import flow that encrypts before writing to OPFS.
+4. Add task and calendar records that fit the Today/Chat/Notes/Calendar surfaces rather than becoming a separate project-management module.
+5. Expand audit coverage around lock/unlock, document access, local writes, and sync attempts without storing PHI in logs.
 
 ## Compliance note
 
