@@ -1,3 +1,4 @@
+import { recordAuditEventSafely } from "../audit/auditRepository";
 import type { EncryptedPayload } from "../crypto/envelope";
 import { decryptInCryptoWorker, encryptInCryptoWorker } from "../crypto/workerClient";
 import { getLocalDb } from "../db/client";
@@ -78,6 +79,17 @@ export type SyncOutboxProcessingResult =
   | { status: "retry_scheduled"; operationId: string; messageId: string; nextAttemptAt: string }
   | { status: "failed"; operationId: string; messageId: string };
 
+export type SyncOutboxSchedulerOptions = {
+  maxOperations?: number;
+  now?: Date;
+  claimTtlMs?: number;
+};
+
+export type SyncOutboxSchedulerResult = {
+  processedCount: number;
+  results: SyncOutboxProcessingResult[];
+};
+
 type SyncOutboxOperationRow = {
   id: string;
   operation_type: string;
@@ -101,10 +113,13 @@ export const DEFAULT_SYNC_OUTBOX_RETRY_POLICY: SyncOutboxRetryPolicy = {
 };
 
 export const DEFAULT_SYNC_OUTBOX_CLAIM_TTL_MS = 30_000;
+export const DEFAULT_SYNC_OUTBOX_SCHEDULER_MAX_OPERATIONS = 5;
 
 const MAX_CONVERSATION_ID_LENGTH = 200;
 const MAX_CHAT_BODY_LENGTH = 10_000;
 const MAX_OUTBOX_BATCH_SIZE = 50;
+
+let syncOutboxSchedulerPromise: Promise<SyncOutboxSchedulerResult> | undefined;
 
 export async function createLocalChatMessage(draft: LocalChatMessageDraft): Promise<LocalChatMessage> {
   const conversationId = normalizeConversationId(draft.conversationId);
@@ -149,6 +164,12 @@ export async function createLocalChatMessage(draft: LocalChatMessageDraft): Prom
     await db.query("ROLLBACK");
     throw error;
   }
+
+  void recordAuditEventSafely("chat.message.enqueued", "chat_message", id, {
+    conversationId,
+    outboxId,
+    operationType: "chat.message.send"
+  });
 
   return {
     id,
@@ -209,10 +230,18 @@ export async function claimNextDueSyncOutboxOperation(
 
 export async function processNextDueSyncOutboxOperation(
   sender: SyncOutboxSender,
-  now = new Date()
+  now = new Date(),
+  claimTtlMs = DEFAULT_SYNC_OUTBOX_CLAIM_TTL_MS
 ): Promise<SyncOutboxProcessingResult> {
-  const operation = await claimNextDueSyncOutboxOperation(now);
+  const operation = await claimNextDueSyncOutboxOperation(now, claimTtlMs);
   if (operation === undefined) return { status: "idle" };
+
+  void recordAuditEventSafely("chat.outbox.claimed", "sync_outbox", operation.id, {
+    entityType: operation.entityType,
+    entityId: operation.entityId,
+    attemptCount: operation.attemptCount,
+    lockedUntilAt: operation.lockedUntilAt
+  });
 
   await markLocalChatMessageSending(operation.entityId);
 
@@ -222,17 +251,32 @@ export async function processNextDueSyncOutboxOperation(
     if (result.status === "sent") {
       await completeClaimedSyncOutboxOperation(operation, now);
       await markLocalChatMessageSent(operation.entityId);
+      void recordAuditEventSafely("chat.message.sent", "chat_message", operation.entityId, {
+        outboxId: operation.id,
+        attemptCount: operation.attemptCount
+      });
       return { status: "sent", operationId: operation.id, messageId: operation.entityId };
     }
 
     if (result.status === "failed") {
       await failClaimedSyncOutboxOperation(operation, result.error, now);
       await markLocalChatMessageFailed(operation.entityId);
+      void recordAuditEventSafely("chat.message.failed", "chat_message", operation.entityId, {
+        outboxId: operation.id,
+        attemptCount: operation.attemptCount,
+        terminal: true
+      });
       return { status: "failed", operationId: operation.id, messageId: operation.entityId };
     }
 
     const nextAttemptAt = await releaseClaimedSyncOutboxOperationForRetry(operation, result.error, now);
     await updateLocalChatMessageDeliveryState(operation.entityId, "queued");
+    void recordAuditEventSafely("chat.message.retry_scheduled", "chat_message", operation.entityId, {
+      outboxId: operation.id,
+      attemptCount: operation.attemptCount + 1,
+      nextAttemptAt,
+      reason: "sender_retry"
+    });
     return {
       status: "retry_scheduled",
       operationId: operation.id,
@@ -242,6 +286,12 @@ export async function processNextDueSyncOutboxOperation(
   } catch (error) {
     const nextAttemptAt = await releaseClaimedSyncOutboxOperationForRetry(operation, formatUnknownError(error), now);
     await updateLocalChatMessageDeliveryState(operation.entityId, "queued");
+    void recordAuditEventSafely("chat.message.retry_scheduled", "chat_message", operation.entityId, {
+      outboxId: operation.id,
+      attemptCount: operation.attemptCount + 1,
+      nextAttemptAt,
+      reason: "sender_exception"
+    });
     return {
       status: "retry_scheduled",
       operationId: operation.id,
@@ -249,6 +299,22 @@ export async function processNextDueSyncOutboxOperation(
       nextAttemptAt
     };
   }
+}
+
+export function processDueSyncOutboxOperations(
+  sender: SyncOutboxSender,
+  options: SyncOutboxSchedulerOptions = {}
+): Promise<SyncOutboxSchedulerResult> {
+  if (syncOutboxSchedulerPromise !== undefined) return syncOutboxSchedulerPromise;
+
+  const activeRun = runDueSyncOutboxOperations(sender, options);
+  syncOutboxSchedulerPromise = activeRun;
+  void activeRun.finally(() => {
+    if (syncOutboxSchedulerPromise === activeRun) {
+      syncOutboxSchedulerPromise = undefined;
+    }
+  });
+  return activeRun;
 }
 
 export async function markLocalChatMessageSending(messageId: string): Promise<void> {
@@ -282,6 +348,10 @@ export async function scheduleSyncOutboxRetry(
      WHERE id = $4 AND completed_at IS NULL`,
     [attemptCount, nextAttemptAt, sanitizeOutboxError(lastError), outboxId]
   );
+  void recordAuditEventSafely("sync_outbox.retry_scheduled", "sync_outbox", outboxId, {
+    attemptCount,
+    nextAttemptAt
+  });
 }
 
 export function createChatMessageIdempotencyKey(messageId: string): string {
@@ -317,6 +387,29 @@ export function sanitizeChatMessageDraft(draft: LocalChatMessageDraft): LocalCha
   return {
     conversationId: normalizeConversationId(draft.conversationId),
     body: sanitizeChatMessagePayload(draft.body).body
+  };
+}
+
+async function runDueSyncOutboxOperations(
+  sender: SyncOutboxSender,
+  options: SyncOutboxSchedulerOptions
+): Promise<SyncOutboxSchedulerResult> {
+  const maxOperations = normalizeSchedulerMaxOperations(options.maxOperations);
+  const results: SyncOutboxProcessingResult[] = [];
+
+  for (let index = 0; index < maxOperations; index += 1) {
+    const result = await processNextDueSyncOutboxOperation(
+      sender,
+      options.now ?? new Date(),
+      options.claimTtlMs ?? DEFAULT_SYNC_OUTBOX_CLAIM_TTL_MS
+    );
+    if (result.status === "idle") break;
+    results.push(result);
+  }
+
+  return {
+    processedCount: results.length,
+    results
   };
 }
 
@@ -553,6 +646,11 @@ function createSyncOutboxSelectSql(): string {
 function normalizeOutboxLimit(limit: number): number {
   if (!Number.isFinite(limit)) return 10;
   return Math.min(MAX_OUTBOX_BATCH_SIZE, Math.max(1, Math.floor(limit)));
+}
+
+function normalizeSchedulerMaxOperations(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) return DEFAULT_SYNC_OUTBOX_SCHEDULER_MAX_OPERATIONS;
+  return Math.min(MAX_OUTBOX_BATCH_SIZE, Math.max(1, Math.floor(value)));
 }
 
 function sanitizeOutboxError(value: string): string {
