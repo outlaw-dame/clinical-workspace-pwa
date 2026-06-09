@@ -75,7 +75,7 @@ Delivered:
 
 ### Step 5 — Chat/outbox domain foundation
 
-Status: initial local foundation complete, sync processing still pending.
+Status: local foundation and injected sender processing are implemented; production transport is still out of scope.
 
 Delivered:
 
@@ -86,24 +86,27 @@ Delivered:
 - Local optimistic delivery states: `queued`, `sending`, `sent`, and `failed`.
 - Stable chat message idempotency keys.
 - Bounded exponential retry scheduling helper.
-- Unit tests for draft sanitation, idempotency keys, and retry scheduling.
+- Sync outbox claim/lease columns and due-operation listing.
+- Claim API for one due operation at a time.
+- Injected sender processing boundary for sent, retry, failed, and thrown-error outcomes.
+- Local chat delivery-state updates from outbox processing results.
+- Unit tests for draft sanitation, idempotency keys, retry scheduling, claim lease timing, idle processing, sent processing, retry scheduling, and failed processing.
 - `docs/implementation/chat-outbox-status.md`.
 
 ## Ordered next steps
 
-### Step 5b — Add outbox dequeue/claim and sender processing
+### Step 5c — Add chat outbox audit and scheduler hardening
 
 Deliverables:
 
-- Due-operation query for `sync_outbox` records whose `next_attempt_at` is due.
-- Claim/update API that prevents duplicate in-process sends.
-- Injected sender boundary so tests can simulate success, retryable failure, and terminal failure.
-- Local chat delivery-state updates from outbox results.
-- Tests for duplicate idempotency handling, stale responses, retryable failures, terminal failures, and local rollback boundaries.
+- Tests for duplicate idempotency handling and stale claim responses.
+- Privacy-safe audit events around local chat enqueue, outbox retry, send success, and send failure.
+- Background-safe scheduler loop that calls the injected sender boundary without creating duplicate in-process sends.
+- Documentation update with scheduler limitations and non-production transport boundary.
 
 Exit criteria:
 
-- Local chat messages can move from queued to sent/failed through a tested sync boundary without adding a production network dependency.
+- Local chat outbox processing has audit coverage and a scheduler wrapper while still avoiding production network claims.
 
 ### Step 6 — Add encrypted document import slice
 
