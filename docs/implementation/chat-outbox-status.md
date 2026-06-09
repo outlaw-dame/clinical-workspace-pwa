@@ -22,8 +22,9 @@ Implemented on `master`:
 - Scheduler cleanup that clears the in-flight guard on both success and failure without creating unhandled cleanup promises.
 - Chat delivery-state updates from outbox processing results.
 - Privacy-safe audit events around local enqueue, outbox claim, send success, retry scheduling, terminal failure, and manual retry scheduling.
-- Sanitization for conversation IDs, message bodies, idempotency components, and stored outbox errors.
-- Unit coverage for draft sanitation, idempotency keys, retry scheduling, claim lease timing, idle processing, sent processing, retry scheduling, failed processing, thrown sender errors, audit metadata, and duplicate-safe scheduler behavior.
+- Edge-case helper functions for client-message idempotency keys, existing-message lookup, and stale-claim-aware completion/retry/failure updates.
+- Sanitization for conversation IDs, message bodies, idempotency components, client message IDs, and stored outbox errors.
+- Unit coverage for draft sanitation, idempotency keys, retry scheduling, claim lease timing, idle processing, sent processing, retry scheduling, failed processing, thrown sender errors, audit metadata, duplicate-safe scheduler behavior, duplicate client-message lookup, and stale claim responses.
 
 ## Privacy and storage boundaries
 
@@ -43,10 +44,11 @@ Implemented on `master`:
 - No chat UI wiring exists yet.
 - No conflict resolution or remote receipt state exists yet.
 - No server/session trust model exists yet.
+- Stale-claim-aware helper functions are covered, but `processNextDueSyncOutboxOperation` still needs a small integration pass so sent/retry/failed paths return explicit stale-claim results when the claimed row was already completed or released.
 
 ## Next implementation steps
 
-1. Add tests for duplicate idempotency handling and stale claim responses.
+1. Integrate the stale-claim helper functions into `processNextDueSyncOutboxOperation` once the connector allows the larger refactor or a smaller patch path is available.
 2. Add timed background retry registration only after the UI/runtime surface is ready to own lifecycle cleanup.
 3. Wire a minimal Chat UI to create and list local messages after the local/sync boundary remains green in CI.
 4. Keep production transport out of scope until server/session trust is intentionally designed.
