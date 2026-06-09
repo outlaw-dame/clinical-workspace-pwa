@@ -110,7 +110,7 @@ The current passkey flow proves a local browser authenticator ceremony and gates
 - Worker-backed EmbeddingGemma provider path with deterministic session fallback
 - EmbeddingGemma manifest, artifact integrity policy, and verified artifact cache hardening
 - EmbeddingGemma runtime troubleshooting and manual QA guide
-- Local chat-message/outbox domain foundation with encrypted payloads, optimistic delivery state, idempotency keys, retry scheduling helpers, claim leases, and injected sender processing
+- Local chat-message/outbox domain foundation with encrypted payloads, optimistic delivery state, idempotency keys, retry scheduling helpers, claim leases, injected sender processing, privacy-safe audit hooks, and duplicate-safe scheduler wrapper
 - Injectable local search repository boundary
 - Privacy-safe audit-event writes with serialized hash-chain updates
 - Background/batched search-index repair
@@ -120,7 +120,7 @@ The current passkey flow proves a local browser authenticator ceremony and gates
 
 ## Next implementation phase
 
-1. Add privacy-safe audit events and scheduler hardening for chat outbox processing.
+1. Add remaining chat outbox edge-case tests for duplicate idempotency and stale claim responses.
 2. Add document import flow that encrypts before writing to OPFS.
 3. Add task and calendar records that fit the Today/Chat/Notes/Calendar surfaces rather than becoming a separate project-management module.
 4. Expand audit coverage around lock/unlock, document access, local writes, and sync attempts without storing PHI in logs.
