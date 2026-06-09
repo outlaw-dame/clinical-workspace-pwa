@@ -58,21 +58,22 @@ Delivered:
 - README now states deterministic embeddings remain the fallback for unsupported runtime/provider failure cases.
 - Detailed implementation status lives in `docs/implementation/embedding-gemma-status.md`.
 
-## Ordered next steps
+### Step 4 — EmbeddingGemma runtime troubleshooting and QA notes
 
-### Step 4 — Add runtime troubleshooting and QA notes
+Status: complete as a documentation baseline.
 
-Deliverables:
+Delivered:
 
-- Browser/runtime support notes for local transformer worker path.
-- First-run model download/cache checklist.
+- `docs/implementation/embedding-gemma-runtime-qa.md`.
+- Runtime capability checklist for Worker and WebAssembly support.
+- Artifact cache capability checklist.
+- First-run model load checklist.
 - Offline reload checklist.
-- Corrupted-cache recovery checklist.
-- Fallback-provider checklist.
+- Corrupted-cache checklist.
+- Worker failure, timeout, abort, and fallback checklist.
+- Manual QA record template.
 
-Exit criteria:
-
-- A developer can manually verify the local embedding path without reading old PR threads.
+## Ordered next steps
 
 ### Step 5 — Add chat/outbox domain model slice, not full chat
 
