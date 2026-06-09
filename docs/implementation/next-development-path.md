@@ -6,7 +6,7 @@ This is the recommended path to resume development cleanly from the current code
 
 ## Current working priority
 
-The safest next priority is not broad feature expansion. The immediate priority is to stabilize the local embedding/search foundation, keep the private-data boundary intact, and then add user-facing workspace records in small slices.
+The safest next priority is not broad feature expansion. The immediate priority is to keep the local embedding/search foundation stable, preserve the private-data boundary, and then add user-facing workspace records in small slices.
 
 ## Non-goals for the next cycle
 
@@ -20,11 +20,13 @@ Do not start these until the guardrails below are complete:
 - Remote semantic search over decrypted notes.
 - Broad feature surfaces that bypass lock, audit, search, or encryption boundaries.
 
-## Ordered next steps
+## Completed recovery steps
 
-### Step 1 — Finish implementation documentation recovery
+### Step 1 — Implementation documentation recovery
 
-Deliverables:
+Status: complete enough to serve as the current truth layer.
+
+Delivered:
 
 - `docs/implementation/current-state.md`.
 - `docs/implementation/security-boundaries.md`.
@@ -33,36 +35,30 @@ Deliverables:
 - `docs/implementation/review-and-ci-log.md`.
 - README link to this documentation directory.
 
-Exit criteria:
+### Step 2 — PR #20 / EmbeddingGemma manifest hardening
 
-- Future work can start from repo docs rather than broken/truncated chats.
-- The docs distinguish implemented, scaffolded, pending PR, and not-complete work.
+Status: merged.
 
-### Step 2 — Resolve PR #20 / EmbeddingGemma manifest hardening
+Delivered:
 
-Deliverables:
+- PR #20 merged into `master` as `97bfeb9fe8c5f090857e94cec3eb9db86041348d`.
+- Unpinned artifact roles are metadata-only.
+- Duplicate pinned/unpinned paths fail validation.
+- Unsupported unpinned roles have regression coverage.
+- The PR head CI was green before merge.
 
-- Merge PR #20 or intentionally replace it with an equivalent manifest-hardening PR.
-- Ensure unpinned artifacts are metadata-only.
-- Ensure duplicate pinned/unpinned paths fail validation.
-- Ensure CI is green after any docs/master drift is resolved.
+### Step 3 — README EmbeddingGemma reconciliation
 
-Exit criteria:
+Status: complete for current repo state.
 
-- Runtime-critical artifacts cannot be unpinned.
-- The model manifest and artifact-integrity policy are documented and tested.
+Delivered:
 
-### Step 3 — Reconcile README with implementation state
+- README no longer says EmbeddingGemma is inactive.
+- README now states EmbeddingGemma is preferred when local transformer worker runtime support is available.
+- README now states deterministic embeddings remain the fallback for unsupported runtime/provider failure cases.
+- Detailed implementation status lives in `docs/implementation/embedding-gemma-status.md`.
 
-Deliverables:
-
-- Update README EmbeddingGemma section so it matches the code after PR #16, PR #17, PR #18, PR #19, and PR #20 if merged.
-- Keep README concise and link to `docs/implementation/embedding-gemma-status.md` for details.
-
-Exit criteria:
-
-- README no longer says the provider is inactive if the code prefers EmbeddingGemma by default with fallback.
-- README does not duplicate all implementation details that now belong in docs.
+## Ordered next steps
 
 ### Step 4 — Add runtime troubleshooting and QA notes
 
