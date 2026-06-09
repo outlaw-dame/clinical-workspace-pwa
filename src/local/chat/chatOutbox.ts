@@ -309,11 +309,12 @@ export function processDueSyncOutboxOperations(
 
   const activeRun = runDueSyncOutboxOperations(sender, options);
   syncOutboxSchedulerPromise = activeRun;
-  void activeRun.finally(() => {
+  const clearActiveRun = (): void => {
     if (syncOutboxSchedulerPromise === activeRun) {
       syncOutboxSchedulerPromise = undefined;
     }
-  });
+  };
+  void activeRun.then(clearActiveRun, clearActiveRun);
   return activeRun;
 }
 
