@@ -18,36 +18,30 @@ Several older conversations may be unavailable or truncated. Future decisions sh
 
 The README currently contains product direction, stack, security rules, implemented surfaces, EmbeddingGemma details, next phase, and compliance caveats.
 
-Deviation:
+Status:
 
-- This makes the README useful but also easy to stale.
+- README now links to `docs/implementation/README.md`.
+- README EmbeddingGemma status has been reconciled after PR #20.
+- Later cleanup can keep README shorter and move deeper details into this directory.
 
-Resolution path:
+## 3. EmbeddingGemma active/default wording was stale
 
-- Keep README as a concise entry point.
-- Move detailed current-state and implementation sequencing into `docs/implementation`.
-- Link README to these docs.
+The README previously reflected an earlier state where EmbeddingGemma was only a preferred candidate.
 
-## 3. EmbeddingGemma active/default wording may be stale
+Status:
 
-The README still has wording from an earlier state where EmbeddingGemma was a preferred candidate and the deterministic fallback remained active.
+- README now states that EmbeddingGemma is preferred when the local transformer worker runtime is available.
+- README also states that the deterministic provider remains the session fallback for unsupported runtimes and provider failures.
+- `embedding-gemma-status.md` is the detailed implementation note.
 
-Later PR history includes work titled `Enable EmbeddingGemma as default local embeddings`, then artifact-cache and verified-cache hardening.
+## 4. PR #20 is merged
 
-Resolution path:
+PR #20 contained the manifest and unpinned-artifact policy update. It is now merged into `master` as `97bfeb9fe8c5f090857e94cec3eb9db86041348d`.
 
-- Reconcile README against the actual provider-selection code after PR #20 is resolved.
-- Use `embedding-gemma-status.md` as the detailed implementation note.
-- State clearly whether the runtime prefers EmbeddingGemma by default with fallback, or whether it is still gated.
+Status:
 
-## 4. PR #20 is not the same as `master` until merged
-
-PR #20 contains manifest/unpinned-artifact policy hardening that should not be silently assumed to exist on `master` until it is merged or superseded.
-
-Resolution path:
-
-- Merge PR #20 after resolving docs drift, or create a replacement hardening PR.
-- Update this file and `embedding-gemma-status.md` after merge.
+- Do not treat PR #20 as pending anymore.
+- Continue to keep artifact policy tests aligned with future manifest changes.
 
 ## 5. Production trust is not complete
 
