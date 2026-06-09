@@ -12,7 +12,7 @@ Start with [`docs/implementation/README.md`](docs/implementation/README.md) when
 
 - **Native-feeling PWA:** installable shell, safe-area aware layout, iPhone bottom tabs, larger-screen sidebar, reduced-motion support.
 - **Apple-like default interface:** system typography, calm grouped cards, large titles, subtle translucency, minimal dependency footprint.
-- **Local-first data boundary:** PGlite local database foundation with audit, sync-outbox, encrypted notes, and local search tables.
+- **Local-first data boundary:** PGlite local database foundation with audit, sync-outbox, encrypted notes, encrypted chat-message records, and local search tables.
 - **Encrypted document boundary:** OPFS vault helpers that only accept encrypted bytes.
 - **Security-first posture:** local app lock, passkey unlock ceremony, Web Crypto smoke test, no PHI-bearing service-worker API caching, no analytics/session replay.
 - **Progressive platform behavior:** feature detection for WebAuthn, Web Crypto, OPFS, Web Push, Share API, file picker, install state, pointer type, and reduced motion.
@@ -110,6 +110,7 @@ The current passkey flow proves a local browser authenticator ceremony and gates
 - Worker-backed EmbeddingGemma provider path with deterministic session fallback
 - EmbeddingGemma manifest, artifact integrity policy, and verified artifact cache hardening
 - EmbeddingGemma runtime troubleshooting and manual QA guide
+- Local chat-message/outbox domain foundation with encrypted payloads, optimistic delivery state, idempotency keys, and retry scheduling helpers
 - Injectable local search repository boundary
 - Privacy-safe audit-event writes with serialized hash-chain updates
 - Background/batched search-index repair
@@ -119,7 +120,7 @@ The current passkey flow proves a local browser authenticator ceremony and gates
 
 ## Next implementation phase
 
-1. Add chat message model, local optimistic send, and sync outbox operations with exponential backoff and idempotency.
+1. Add outbox dequeue/claim and injected sender processing for chat sync retries.
 2. Add document import flow that encrypts before writing to OPFS.
 3. Add task and calendar records that fit the Today/Chat/Notes/Calendar surfaces rather than becoming a separate project-management module.
 4. Expand audit coverage around lock/unlock, document access, local writes, and sync attempts without storing PHI in logs.
