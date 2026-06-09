@@ -35,6 +35,21 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation_created_at
   ON chat_messages (conversation_id, created_at ASC, id ASC)
   WHERE deleted_at IS NULL;
 
+CREATE TABLE IF NOT EXISTS local_documents (
+  id TEXT PRIMARY KEY,
+  vault_path TEXT NOT NULL UNIQUE,
+  encrypted_metadata_payload TEXT NOT NULL,
+  encrypted_size_bytes INTEGER NOT NULL,
+  source_size_bytes INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  deleted_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_local_documents_created_at
+  ON local_documents (created_at DESC, id DESC)
+  WHERE deleted_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS webauthn_credentials (
   id TEXT PRIMARY KEY,
   credential_id TEXT NOT NULL UNIQUE,
