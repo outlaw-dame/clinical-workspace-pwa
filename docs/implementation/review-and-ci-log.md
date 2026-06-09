@@ -30,19 +30,21 @@ Recent search/embedding work has been the active implementation thread:
 - Verified artifact-cache work added bounded retry/backoff, SHA-256 verification, stale-cache deletion, verification error support, and provider preflight before worker model load.
 - Cache review fixes cleared failed verification promises, avoided memoizing caller-scoped abort signals, treated aborts as cancellation, preserved retry context safely, and made worker loading serve pinned artifacts from the verified cache with hash checks.
 - Verified-cache hardening failed closed for unpinned files under the pinned model revision and added focused verification memoization tests.
+- PR #20 merged the manifest/unpinned-artifact policy update into `master` as `97bfeb9fe8c5f090857e94cec3eb9db86041348d`.
 
 ## PR #20 recovery note
 
-PR #20 / `feat/gemma-manifest` addressed a security review about unpinned embedding artifacts.
+PR #20 / `feat/gemma-manifest` addressed a review about unpinned embedding artifacts.
 
-Important result:
+Result:
 
-- Unpinned artifacts should be limited to metadata roles only.
-- Runtime-critical graph/data/tokenizer artifacts must stay pinned by SHA-256 integrity metadata.
-- Unsupported unpinned roles should throw `invalid_manifest` rather than being accepted.
-- Duplicate pinned/unpinned artifact paths should remain rejected.
+- Unpinned artifacts are limited to metadata roles only.
+- Runtime model/tokenizer files remain pinned.
+- Unsupported unpinned roles throw `invalid_manifest` rather than being accepted.
+- Duplicate pinned/unpinned artifact paths remain rejected.
+- The review thread was resolved before merge.
 
-The reviewed PR head was `cf94cc48a20fd185c7fb00c162659d0437941820`. CI for that head was reported green for install/typecheck/lint/tests/build during the recovery work. The review thread was replied to, but thread resolution may still need manual GitHub action if the connector cannot mark it resolved.
+The reviewed PR head was `cf94cc48a20fd185c7fb00c162659d0437941820`. CI for that head was green for install/typecheck/lint/tests/build before merge. GitHub did not return a workflow run for the squash merge commit during the immediate merge follow-up.
 
 ## Documentation recovery note
 
