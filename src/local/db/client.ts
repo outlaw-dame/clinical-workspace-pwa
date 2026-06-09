@@ -21,6 +21,20 @@ CREATE TABLE IF NOT EXISTS secure_notes (
   deleted_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL,
+  encrypted_payload TEXT NOT NULL,
+  delivery_state TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  deleted_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation_created_at
+  ON chat_messages (conversation_id, created_at ASC, id ASC)
+  WHERE deleted_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS webauthn_credentials (
   id TEXT PRIMARY KEY,
   credential_id TEXT NOT NULL UNIQUE,
@@ -56,6 +70,9 @@ CREATE TABLE IF NOT EXISTS sync_outbox (
   created_at TEXT NOT NULL,
   last_error TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_sync_outbox_next_attempt
+  ON sync_outbox (next_attempt_at ASC, created_at ASC, id ASC);
 `;
 
 export async function getLocalDb(): Promise<PGlite> {
