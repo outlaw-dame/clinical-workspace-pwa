@@ -2,7 +2,13 @@ import { LocalEmbeddingProviderError } from "./embeddingProviderErrors";
 
 export type LocalEmbeddingArtifactDtype = "fp32" | "q8" | "q4";
 
-export type LocalEmbeddingArtifactRole = "model-graph" | "model-data" | "tokenizer-json" | "tokenizer-model";
+export type LocalEmbeddingArtifactRole =
+  | "model-graph"
+  | "model-data"
+  | "tokenizer-json"
+  | "tokenizer-model"
+  | "model-metadata"
+  | "tokenizer-metadata";
 
 export type LocalEmbeddingArtifactIntegrity = {
   path: string;
@@ -13,11 +19,19 @@ export type LocalEmbeddingArtifactIntegrity = {
   dtype?: LocalEmbeddingArtifactDtype;
 };
 
+export type LocalEmbeddingUnpinnedArtifact = {
+  path: string;
+  role: LocalEmbeddingArtifactRole;
+  reason: string;
+  required: boolean;
+};
+
 export type LocalEmbeddingArtifactIntegrityPolicy = {
   manifestId: string;
   modelId: string;
   revision: string;
   artifacts: readonly LocalEmbeddingArtifactIntegrity[];
+  unpinnedArtifacts?: readonly LocalEmbeddingUnpinnedArtifact[];
 };
 
 export function assertValidArtifactIntegrityPolicy(policy: LocalEmbeddingArtifactIntegrityPolicy): void {
@@ -51,14 +65,16 @@ export function assertValidArtifactIntegrityPolicy(policy: LocalEmbeddingArtifac
       throw new LocalEmbeddingProviderError("invalid_manifest", "Embedding model artifacts must declare a dtype");
     }
 
-    if ((artifact.role === "tokenizer-json" || artifact.role === "tokenizer-model") && artifact.dtype !== undefined) {
-      throw new LocalEmbeddingProviderError("invalid_manifest", "Embedding tokenizer artifacts must not declare a dtype");
+    if (!(artifact.role === "model-graph" || artifact.role === "model-data") && artifact.dtype !== undefined) {
+      throw new LocalEmbeddingProviderError("invalid_manifest", "Embedding non-model artifacts must not declare a dtype");
     }
 
     if (!/^[a-f0-9]{64}$/u.test(artifact.sha256)) {
       throw new LocalEmbeddingProviderError("invalid_manifest", "Embedding artifact SHA-256 must be lowercase hex");
     }
   }
+
+  validateUnpinnedArtifacts(policy.unpinnedArtifacts, paths);
 
   for (const role of ["model-graph", "model-data", "tokenizer-json", "tokenizer-model"] as const) {
     if (!requiredRoles.has(role)) {
@@ -67,5 +83,30 @@ export function assertValidArtifactIntegrityPolicy(policy: LocalEmbeddingArtifac
         `Embedding artifact policy is missing a required artifact role: ${role}`
       );
     }
+  }
+}
+
+function validateUnpinnedArtifacts(
+  artifacts: readonly LocalEmbeddingUnpinnedArtifact[] | undefined,
+  pinnedPaths: ReadonlySet<string>
+): void {
+  if (artifacts === undefined) return;
+
+  const unpinnedPaths = new Set<string>();
+
+  for (const artifact of artifacts) {
+    if (!artifact.path || !artifact.reason) {
+      throw new LocalEmbeddingProviderError("invalid_manifest", "Embedding artifact policy includes incomplete unpinned artifact metadata");
+    }
+
+    if (artifact.role !== "model-metadata" && artifact.role !== "tokenizer-metadata") {
+      throw new LocalEmbeddingProviderError("invalid_manifest", "Embedding artifact policy includes unsupported unpinned artifact role");
+    }
+
+    if (pinnedPaths.has(artifact.path) || unpinnedPaths.has(artifact.path)) {
+      throw new LocalEmbeddingProviderError("invalid_manifest", "Embedding artifact policy contains duplicate artifact paths");
+    }
+
+    unpinnedPaths.add(artifact.path);
   }
 }

@@ -56,14 +56,14 @@ describe("assertValidArtifactIntegrityPolicy", () => {
     ).toThrow("model artifacts must declare a dtype");
   });
 
-  it("rejects dtype declarations on tokenizer artifacts", () => {
+  it("rejects dtype declarations on non-model artifacts", () => {
     const artifacts = embeddingGemma300mArtifactIntegrityPolicy.artifacts.map((artifact) =>
       artifact.role === "tokenizer-json" ? { ...artifact, dtype: "q4" as const } : artifact
     );
 
     expect(() =>
       assertValidArtifactIntegrityPolicy({ ...embeddingGemma300mArtifactIntegrityPolicy, artifacts })
-    ).toThrow("tokenizer artifacts must not declare a dtype");
+    ).toThrow("non-model artifacts must not declare a dtype");
   });
 
   it("requires all runtime-critical artifact roles", () => {
@@ -74,5 +74,20 @@ describe("assertValidArtifactIntegrityPolicy", () => {
     expect(() =>
       assertValidArtifactIntegrityPolicy({ ...embeddingGemma300mArtifactIntegrityPolicy, artifacts })
     ).toThrow("missing a required artifact role");
+  });
+
+  it("rejects unsupported optional artifact roles", () => {
+    const [first] = embeddingGemma300mArtifactIntegrityPolicy.artifacts;
+    if (first === undefined) throw new Error("missing fixture artifact");
+    const optionalArtifacts = [
+      { path: `${first.path}.copy`, role: "tokenizer-json", reason: "fixture", required: true }
+    ] as const;
+
+    expect(() =>
+      assertValidArtifactIntegrityPolicy({
+        ...embeddingGemma300mArtifactIntegrityPolicy,
+        unpinnedArtifacts: optionalArtifacts
+      })
+    ).toThrow("unsupported unpinned artifact role");
   });
 });

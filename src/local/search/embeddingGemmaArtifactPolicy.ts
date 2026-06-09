@@ -2,6 +2,7 @@ import {
   assertValidArtifactIntegrityPolicy,
   type LocalEmbeddingArtifactIntegrityPolicy
 } from "./embeddingArtifactIntegrity";
+import { embeddingGemma300mUnpinnedArtifacts } from "./embeddingGemmaUnpinnedArtifacts";
 import {
   EMBEDDINGGEMMA_CANDIDATE_MODEL_ID,
   EMBEDDINGGEMMA_PINNED_REVISION,
@@ -43,7 +44,8 @@ export const embeddingGemma300mArtifactIntegrityPolicy: LocalEmbeddingArtifactIn
       remoteSizeLabel: "4.69 MB",
       required: true
     }
-  ]
+  ],
+  unpinnedArtifacts: embeddingGemma300mUnpinnedArtifacts
 };
 
 export function getEmbeddingGemma300mArtifactIntegrityPolicy(): LocalEmbeddingArtifactIntegrityPolicy {
