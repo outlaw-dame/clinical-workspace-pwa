@@ -68,11 +68,25 @@ CREATE TABLE IF NOT EXISTS sync_outbox (
   attempt_count INTEGER NOT NULL DEFAULT 0,
   next_attempt_at TEXT,
   created_at TEXT NOT NULL,
-  last_error TEXT
+  last_error TEXT,
+  claim_token TEXT,
+  claimed_at TEXT,
+  locked_until_at TEXT,
+  completed_at TEXT
 );
 
+ALTER TABLE sync_outbox ADD COLUMN IF NOT EXISTS claim_token TEXT;
+ALTER TABLE sync_outbox ADD COLUMN IF NOT EXISTS claimed_at TEXT;
+ALTER TABLE sync_outbox ADD COLUMN IF NOT EXISTS locked_until_at TEXT;
+ALTER TABLE sync_outbox ADD COLUMN IF NOT EXISTS completed_at TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_sync_outbox_next_attempt
-  ON sync_outbox (next_attempt_at ASC, created_at ASC, id ASC);
+  ON sync_outbox (next_attempt_at ASC, created_at ASC, id ASC)
+  WHERE completed_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_sync_outbox_lock
+  ON sync_outbox (locked_until_at ASC, id ASC)
+  WHERE completed_at IS NULL;
 `;
 
 export async function getLocalDb(): Promise<PGlite> {
