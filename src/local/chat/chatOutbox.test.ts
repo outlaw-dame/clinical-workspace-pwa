@@ -1,16 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { recordAuditEventSafely } from "../audit/auditRepository";
 import type { EncryptedPayload } from "../crypto/envelope";
-import { decryptInCryptoWorker } from "../crypto/workerClient";
+import { decryptInCryptoWorker, encryptInCryptoWorker } from "../crypto/workerClient";
 import { getLocalDb } from "../db/client";
 import {
   createChatMessageIdempotencyKey,
+  createLocalChatMessage,
   getSyncOutboxLockedUntilAt,
   getSyncOutboxNextAttemptAt,
   getSyncOutboxRetryDelayMs,
+  processDueSyncOutboxOperations,
   processNextDueSyncOutboxOperation,
   sanitizeChatMessageDraft,
-  type SyncOutboxRetryPolicy
+  type SyncOutboxRetryPolicy,
+  type SyncOutboxSendResult
 } from "./chatOutbox";
+
+vi.mock("../audit/auditRepository", () => ({
+  recordAuditEventSafely: vi.fn()
+}));
 
 vi.mock("../db/client", () => ({
   getLocalDb: vi.fn()
@@ -58,9 +66,12 @@ const syncOutboxRow = {
 };
 
 beforeEach(() => {
+  vi.mocked(recordAuditEventSafely).mockReset();
   vi.mocked(getLocalDb).mockReset();
   vi.mocked(decryptInCryptoWorker).mockReset();
+  vi.mocked(encryptInCryptoWorker).mockReset();
   vi.mocked(decryptInCryptoWorker).mockResolvedValue(decryptedOutboxPayload);
+  vi.mocked(encryptInCryptoWorker).mockResolvedValue(encryptedEnvelope);
 });
 
 describe("sanitizeChatMessageDraft", () => {
@@ -86,6 +97,31 @@ describe("sanitizeChatMessageDraft", () => {
     expect(() => sanitizeChatMessageDraft({ conversationId: "convo-1", body: " \r\n " })).toThrow(
       "Chat message body is required"
     );
+  });
+});
+
+describe("createLocalChatMessage", () => {
+  it("stores encrypted local and outbox payloads and records privacy-safe audit metadata", async () => {
+    const db = createMockDb([[], [], [], []]);
+    vi.mocked(getLocalDb).mockResolvedValue(db as never);
+
+    await expect(createLocalChatMessage({ conversationId: "conversation-1", body: "sensitive chat body" })).resolves.toEqual(
+      expect.objectContaining({
+        conversationId: "conversation-1",
+        body: "sensitive chat body",
+        deliveryState: "queued"
+      })
+    );
+
+    expect(db.query.mock.calls[1]?.[0]).toContain("INSERT INTO chat_messages");
+    expect(db.query.mock.calls[2]?.[0]).toContain("INSERT INTO sync_outbox");
+    expect(recordAuditEventSafely).toHaveBeenCalledWith(
+      "chat.message.enqueued",
+      "chat_message",
+      expect.any(String),
+      expect.objectContaining({ conversationId: "conversation-1", operationType: "chat.message.send" })
+    );
+    expect(JSON.stringify(vi.mocked(recordAuditEventSafely).mock.calls)).not.toContain("sensitive chat body");
   });
 });
 
@@ -138,7 +174,7 @@ describe("processNextDueSyncOutboxOperation", () => {
     expect(sender).not.toHaveBeenCalled();
   });
 
-  it("claims a due operation, invokes the injected sender, and marks the chat message sent", async () => {
+  it("claims a due operation, invokes the injected sender, marks the chat message sent, and audits safe metadata", async () => {
     const db = createMockDb([[syncOutboxRow], [{ ...syncOutboxRow, claim_token: "claim-1" }], [], [], []]);
     vi.mocked(getLocalDb).mockResolvedValue(db as never);
     const sender = vi.fn().mockResolvedValue({ status: "sent" });
@@ -161,6 +197,19 @@ describe("processNextDueSyncOutboxOperation", () => {
     expect(db.query.mock.calls[2]?.[1]).toEqual(["sending", expect.any(String), "message-1"]);
     expect(db.query.mock.calls[3]?.[0]).toContain("completed_at = $1");
     expect(db.query.mock.calls[4]?.[1]).toEqual(["sent", expect.any(String), "message-1"]);
+    expect(recordAuditEventSafely).toHaveBeenCalledWith(
+      "chat.outbox.claimed",
+      "sync_outbox",
+      "outbox-1",
+      expect.objectContaining({ entityId: "message-1", attemptCount: 0 })
+    );
+    expect(recordAuditEventSafely).toHaveBeenCalledWith(
+      "chat.message.sent",
+      "chat_message",
+      "message-1",
+      expect.objectContaining({ outboxId: "outbox-1", attemptCount: 0 })
+    );
+    expect(JSON.stringify(vi.mocked(recordAuditEventSafely).mock.calls)).not.toContain("ciphertext");
   });
 
   it("releases a claimed operation for retry when the injected sender requests retry", async () => {
@@ -178,6 +227,12 @@ describe("processNextDueSyncOutboxOperation", () => {
     expect(db.query.mock.calls[3]?.[0]).toContain("attempt_count = $1");
     expect(db.query.mock.calls[3]?.[1]).toEqual([2, expect.any(String), "temporary outage", "outbox-1", "claim-1"]);
     expect(db.query.mock.calls[4]?.[1]).toEqual(["queued", expect.any(String), "message-1"]);
+    expect(recordAuditEventSafely).toHaveBeenCalledWith(
+      "chat.message.retry_scheduled",
+      "chat_message",
+      "message-1",
+      expect.objectContaining({ outboxId: "outbox-1", attemptCount: 2, reason: "sender_retry" })
+    );
   });
 
   it("marks the chat message failed when the injected sender returns failed", async () => {
@@ -194,6 +249,70 @@ describe("processNextDueSyncOutboxOperation", () => {
     expect(db.query.mock.calls[3]?.[0]).toContain("completed_at = $1");
     expect(db.query.mock.calls[3]?.[1]).toEqual([expect.any(String), "rejected", "outbox-1", "claim-1"]);
     expect(db.query.mock.calls[4]?.[1]).toEqual(["failed", expect.any(String), "message-1"]);
+    expect(recordAuditEventSafely).toHaveBeenCalledWith(
+      "chat.message.failed",
+      "chat_message",
+      "message-1",
+      expect.objectContaining({ outboxId: "outbox-1", terminal: true })
+    );
+  });
+
+  it("schedules retry when the injected sender throws", async () => {
+    const db = createMockDb([[syncOutboxRow], [{ ...syncOutboxRow, claim_token: "claim-1" }], [], [], []]);
+    vi.mocked(getLocalDb).mockResolvedValue(db as never);
+    const sender = vi.fn().mockRejectedValue(new Error("network unavailable with sensitive-ish message"));
+
+    await expect(processNextDueSyncOutboxOperation(sender, new Date("2026-06-08T00:00:00.000Z"))).resolves.toEqual({
+      status: "retry_scheduled",
+      operationId: "outbox-1",
+      messageId: "message-1",
+      nextAttemptAt: expect.any(String)
+    });
+
+    expect(db.query.mock.calls[3]?.[1]).toEqual([
+      1,
+      expect.any(String),
+      "network unavailable with sensitive-ish message",
+      "outbox-1",
+      "claim-1"
+    ]);
+    expect(recordAuditEventSafely).toHaveBeenCalledWith(
+      "chat.message.retry_scheduled",
+      "chat_message",
+      "message-1",
+      expect.objectContaining({ reason: "sender_exception" })
+    );
+  });
+});
+
+describe("processDueSyncOutboxOperations", () => {
+  it("reuses an in-flight scheduler run to avoid duplicate sends", async () => {
+    const db = createMockDb([[syncOutboxRow], [{ ...syncOutboxRow, claim_token: "claim-1" }], [], [], []]);
+    vi.mocked(getLocalDb).mockResolvedValue(db as never);
+    const deferred = createDeferred<SyncOutboxSendResult>();
+    const sender = vi.fn(() => deferred.promise);
+
+    const firstRun = processDueSyncOutboxOperations(sender, {
+      maxOperations: 1,
+      now: new Date("2026-06-08T00:00:00.000Z")
+    });
+    const secondRun = processDueSyncOutboxOperations(sender, {
+      maxOperations: 1,
+      now: new Date("2026-06-08T00:00:00.000Z")
+    });
+
+    expect(firstRun).toBe(secondRun);
+    expect(sender).toHaveBeenCalledTimes(0);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(sender).toHaveBeenCalledTimes(1);
+
+    deferred.resolve({ status: "sent" });
+
+    await expect(firstRun).resolves.toEqual({
+      processedCount: 1,
+      results: [{ status: "sent", operationId: "outbox-1", messageId: "message-1" }]
+    });
   });
 });
 
@@ -202,4 +321,14 @@ function createMockDb(rowBatches: unknown[][]) {
   return {
     query: vi.fn(() => Promise.resolve({ rows: batches.shift() ?? [] }))
   };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve;
+    reject = innerReject;
+  });
+  return { promise, resolve, reject };
 }
