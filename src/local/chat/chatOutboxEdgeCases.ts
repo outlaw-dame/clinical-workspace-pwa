@@ -8,6 +8,10 @@ export type ChatOutboxClaimCompletionResult =
   | { status: "updated"; operationId: string }
   | { status: "stale_claim"; operationId: string; intendedResult: ChatOutboxClaimCompletionIntent };
 
+export type ChatOutboxClaimProcessResult =
+  | { status: "continue"; operationId: string }
+  | { status: "stale_claim"; operationId: string; messageId: string; intendedResult: ChatOutboxClaimCompletionIntent };
+
 type UpdatedOutboxRow = {
   id: string;
 };
@@ -94,6 +98,19 @@ export async function releaseClaimedChatOutboxOperationForRetry(
   );
 
   return toClaimCompletionResult(result.rows[0]?.id, operationId, "retry");
+}
+
+export function toClaimProcessResult(
+  result: ChatOutboxClaimCompletionResult,
+  messageId: string
+): ChatOutboxClaimProcessResult {
+  if (result.status === "updated") return { status: "continue", operationId: result.operationId };
+  return {
+    status: "stale_claim",
+    operationId: result.operationId,
+    messageId,
+    intendedResult: result.intendedResult
+  };
 }
 
 function toClaimCompletionResult(
