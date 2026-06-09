@@ -6,7 +6,8 @@ import {
   createClientChatMessageIdempotencyKey,
   existingLocalChatMessageId,
   failClaimedChatOutboxOperation,
-  releaseClaimedChatOutboxOperationForRetry
+  releaseClaimedChatOutboxOperationForRetry,
+  toClaimProcessResult
 } from "./chatOutboxEdgeCases";
 
 vi.mock("../audit/auditRepository", () => ({
@@ -109,6 +110,21 @@ describe("claimed chat outbox completion helpers", () => {
       "outbox-1",
       "claim-1"
     ]);
+  });
+});
+
+describe("toClaimProcessResult", () => {
+  it("maps updated completion into a continue result", () => {
+    expect(toClaimProcessResult({ status: "updated", operationId: "outbox-1" }, "message-1")).toEqual({
+      status: "continue",
+      operationId: "outbox-1"
+    });
+  });
+
+  it("maps stale completion into a processor-ready stale claim result", () => {
+    expect(
+      toClaimProcessResult({ status: "stale_claim", operationId: "outbox-1", intendedResult: "retry" }, "message-1")
+    ).toEqual({ status: "stale_claim", operationId: "outbox-1", messageId: "message-1", intendedResult: "retry" });
   });
 });
 
