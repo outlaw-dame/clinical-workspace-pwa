@@ -84,7 +84,7 @@ export type CalComSlot = {
 export type CalComSlotsResponse = Record<string, CalComSlot[]>;
 
 export class CalComApiError extends Error {
-  readonly statusCode?: number;
+  readonly statusCode: number | undefined;
   readonly endpoint: string;
 
   constructor(message: string, endpoint: string, statusCode?: number) {
@@ -107,34 +107,22 @@ export function createCalComClient(config: CalComClientConfig) {
   return {
     getAvailableSlots(query: CalComSlotQuery, signal?: AbortSignal): Promise<CalComSlotsResponse> {
       validateSlotQuery(query);
-      return request<CalComSlotsResponse>(
-        fetchImpl,
-        baseUrl,
-        token,
-        "/v2/slots",
-        {
-          method: "GET",
-          query: buildSlotQuery(query),
-          apiVersion: SLOTS_API_VERSION,
-          signal
-        }
-      );
+      return request<CalComSlotsResponse>(fetchImpl, baseUrl, token, "/v2/slots", {
+        method: "GET",
+        query: buildSlotQuery(query),
+        apiVersion: SLOTS_API_VERSION,
+        signal
+      });
     },
 
     createBooking(input: CalComCreateBookingInput, signal?: AbortSignal): Promise<CalComBooking> {
       validateBookingInput(input);
-      return request<CalComBooking>(
-        fetchImpl,
-        baseUrl,
-        token,
-        "/v2/bookings",
-        {
-          method: "POST",
-          body: input,
-          apiVersion: BOOKINGS_API_VERSION,
-          signal
-        }
-      );
+      return request<CalComBooking>(fetchImpl, baseUrl, token, "/v2/bookings", {
+        method: "POST",
+        body: input,
+        apiVersion: BOOKINGS_API_VERSION,
+        signal
+      });
     },
 
     cancelBooking(
@@ -143,18 +131,12 @@ export function createCalComClient(config: CalComClientConfig) {
       signal?: AbortSignal
     ): Promise<CalComBooking> {
       const uid = encodeURIComponent(normalizeRequiredString(bookingUid, "Booking uid is required"));
-      return request<CalComBooking>(
-        fetchImpl,
-        baseUrl,
-        token,
-        `/v2/bookings/${uid}/cancel`,
-        {
-          method: "POST",
-          body: input,
-          apiVersion: BOOKINGS_API_VERSION,
-          signal
-        }
-      );
+      return request<CalComBooking>(fetchImpl, baseUrl, token, `/v2/bookings/${uid}/cancel`, {
+        method: "POST",
+        body: input,
+        apiVersion: BOOKINGS_API_VERSION,
+        signal
+      });
     },
 
     rescheduleBooking(
@@ -164,18 +146,12 @@ export function createCalComClient(config: CalComClientConfig) {
     ): Promise<CalComBooking> {
       const uid = encodeURIComponent(normalizeRequiredString(bookingUid, "Booking uid is required"));
       if (!isIsoUtcLike(input.start)) throw new Error("Reschedule start must be an ISO UTC timestamp");
-      return request<CalComBooking>(
-        fetchImpl,
-        baseUrl,
-        token,
-        `/v2/bookings/${uid}/reschedule`,
-        {
-          method: "POST",
-          body: input,
-          apiVersion: BOOKINGS_API_VERSION,
-          signal
-        }
-      );
+      return request<CalComBooking>(fetchImpl, baseUrl, token, `/v2/bookings/${uid}/reschedule`, {
+        method: "POST",
+        body: input,
+        apiVersion: BOOKINGS_API_VERSION,
+        signal
+      });
     }
   };
 }
@@ -183,9 +159,9 @@ export function createCalComClient(config: CalComClientConfig) {
 type RequestOptions = {
   method: "GET" | "POST";
   apiVersion: string;
+  signal: AbortSignal | undefined;
   query?: URLSearchParams;
   body?: unknown;
-  signal?: AbortSignal;
 };
 
 async function request<T>(
@@ -203,14 +179,21 @@ async function request<T>(
     "cal-api-version": options.apiVersion
   };
 
-  if (options.body !== undefined) headers["Content-Type"] = "application/json";
-
-  const response = await fetchImpl(url.toString(), {
+  const init: RequestInit = {
     method: options.method,
-    headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    signal: options.signal
-  });
+    headers
+  };
+
+  if (options.body !== undefined) {
+    headers["Content-Type"] = "application/json";
+    init.body = JSON.stringify(options.body);
+  }
+
+  if (options.signal !== undefined) {
+    init.signal = options.signal;
+  }
+
+  const response = await fetchImpl(url.toString(), init);
 
   if (!response.ok) {
     throw new CalComApiError(`Cal.com request failed with status ${response.status}`, endpoint, response.status);
